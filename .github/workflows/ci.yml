@@ -1,0 +1,13 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  ci:
+    uses: charlieh0tel/deb-workflows/.github/workflows/python-ci.yml@main
+    with:
+      test-command: ""
