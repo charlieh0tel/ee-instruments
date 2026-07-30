@@ -4,7 +4,12 @@ version = "0.1.0"
 description = "Python drivers for lab test equipment over GPIB/VISA/serial"
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.11"
+# Floor is 3.11 for enum.StrEnum (keysight_mso). Ceiling is 3.13 because
+# python-vxi11 does `import xdrlib` (vxi11/rpc.py), and xdrlib was removed from
+# the stdlib in 3.13 by PEP 594 -- importing hp_436a or hp_8662a on 3.13+ raises
+# ModuleNotFoundError. python-vxi11 is unmaintained, so lifting this ceiling
+# means porting those two drivers onto pyvisa's own VXI-11 support.
+requires-python = ">=3.11,<3.13"
 dependencies = [
     "beautifulsoup4",
     "matplotlib",

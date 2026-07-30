@@ -9,15 +9,23 @@ on:
 jobs:
   ci:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        # Both ends of requires-python. Without this CI silently tests whatever
+        # interpreter it happens to find, which is how the python-vxi11/xdrlib
+        # breakage on 3.13 went unnoticed.
+        python-version: ["3.11", "3.12"]
     steps:
     - uses: actions/checkout@v7
-      with:
-        submodules: recursive
 
     - name: Install uv
       uses: astral-sh/setup-uv@v5
       with:
         enable-cache: true
+        python-version: ${{ matrix.python-version }}
 
     - name: Install dependencies
       run: uv sync --locked
@@ -28,5 +36,25 @@ jobs:
     - name: Check formatting
       run: uv run ruff format --check .
 
-    - name: Import drivers
-      run: uv run python -c "import cal_rf_sensor, hp_436a, hp_8662a, keithley_2015, keysight_mso, mso_grab_png, rs_smb100a"
+    # Smoke test: every dependency is justified by an import somewhere, so
+    # importing every module is what verifies the dependency list. The plot
+    # modules are the only consumers of matplotlib and pyarrow, and the cal_*
+    # scripts are what exercise cal_rf_sensor's SensorInfo. All are
+    # __main__-guarded, so importing them runs no instrument I/O.
+    - name: Import every module
+      env:
+        MPLBACKEND: Agg
+        PYTHONPATH: rf_sensor_measurements
+      run: |
+        uv run python -c "
+        import importlib, pathlib, sys
+        mods = sorted(
+            p.stem
+            for d in ('.', 'rf_sensor_measurements')
+            for p in pathlib.Path(d).glob('*.py')
+        )
+        for m in mods:
+            importlib.import_module(m)
+            print(f'ok {m}')
+        print(f'{len(mods)} modules imported')
+        "
