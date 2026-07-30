@@ -4,7 +4,6 @@ import sys
 
 import cal_rf_sensor
 
-
 SENSOR_INFO = cal_rf_sensor.SensorInfo(
     model="8482A",
     serial="2652A12432",

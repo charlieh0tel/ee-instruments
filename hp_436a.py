@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 
-from enum import IntEnum
 import sys
 import time
+from enum import IntEnum
 
 import vxi11
 

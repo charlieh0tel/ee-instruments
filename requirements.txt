@@ -1,7 +1,0 @@
-pymeasure
-pyvisa_py
-pyserial
-python-vxi11
-pandas
-matplotlib
-

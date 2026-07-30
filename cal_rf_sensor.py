@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-
 import dataclasses
 import datetime
 import time
@@ -7,10 +5,9 @@ import time
 import pandas as pd
 import pyvisa
 
-import rs_smb100a
 import hp_436a
 import hp_8662a
-
+import rs_smb100a
 
 DEFAULT_RS_SMB100A_SIG_GEN_RESOURCE = "TCPIP::rssmb100a180609.local::INSTR"
 DEFAULT_HP_8663A_SIG_GEN_RESOURCE = "TCPIP::e5810a::gpib0,25::INSTR"
@@ -23,7 +20,7 @@ class SensorInfo:
     serial: str
     min_dBm: float
     max_dBm: float
-    cal_points: list([float, float, float])  # Hz, CF%, Rho
+    cal_points: list[tuple[float, float, float]]  # Hz, CF%, Rho
 
 
 def run(argv, sensor_info, power_levels_dBm):
@@ -101,7 +98,7 @@ def run(argv, sensor_info, power_levels_dBm):
     df = pd.DataFrame(readings)
     print(df)
 
-    yyyymmdd = datetime.datetime.today().strftime("%Y%m%d")
+    yyyymmdd = datetime.datetime.now().astimezone().strftime("%Y%m%d")
     output_basename = (
         f"sensor_{sensor_info.model}_SN{sensor_info.serial}_{siggy_name}_{yyyymmdd}"
     )

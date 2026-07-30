@@ -1,12 +1,11 @@
 #!/usr/bin/env python
 
-from pathlib import Path
 import re
 import sys
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import pandas as pd
-
 
 _RE = (
     r"^(sensor)_([a-zA-Z0-9]+)_(SN[a-zA-Z0-9]+)_([a-zA-Z0-9]+)_(\d{8})\.([a-zA-Z9-9]+)$"
@@ -83,7 +82,7 @@ def main(argv):
                 f"Max Abs Err: {max_abs_err:.2f} dB",
                 xy=(x, y),
                 xytext=(x_text, y_text),
-                arrowprops=dict(facecolor="red", shrink=0.02),
+                arrowprops={"facecolor": "red", "shrink": 0.02},
             )
 
         plt.xscale("log")

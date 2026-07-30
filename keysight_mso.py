@@ -1,15 +1,8 @@
 #!/usr/bin/env python
 
-# Python is fun they said.
-try:
-    from enum import StrEnum
-except ImportError:
-    from backports.strenum import StrEnum
-from enum import auto
-
 import sys
 import time
-
+from enum import StrEnum, auto
 
 import pyvisa
 
@@ -96,23 +89,19 @@ def main(argv):
         print("single")
         scope.single()
         time.sleep(0.25)
-        print("DUTYCYCLE(1) = %.3f" % scope.measure_channel(1, Measurement.DUTYCYCLE))
-        print("FREQUENCY(1) = %.3f" % scope.measure_channel(1, Measurement.FREQUENCY))
-        print("VAMPLITUDE(1) = %.3f" % scope.measure_channel(1, Measurement.VAMPLITUDE))
-        print("VAVERAGE(1) = %.3f" % scope.measure_channel(1, Measurement.VAVERAGE))
-        print("VBASE(1) = %.3f" % scope.measure_channel(1, Measurement.VBASE))
-        print("VMAX(1) = %.3f" % scope.measure_channel(1, Measurement.VMAX))
-        print("VMIN(1) = %.3f" % scope.measure_channel(1, Measurement.VMIN))
-        print("VPP(1) = %.3f" % scope.measure_channel(1, Measurement.VPP))
-        print(
-            "VRMS_AC(1) = %.3f"
-            % scope.measure_channel(1, Measurement.VRMS, "CYCLE", "AC")
-        )
-        print(
-            "VRMS_DC(1) = %.3f"
-            % scope.measure_channel(1, Measurement.VRMS, "CYCLE", "DC")
-        )
-        print("VTOP(1) = %.3f" % scope.measure_channel(1, Measurement.VTOP))
+        print(f"DUTYCYCLE(1) = {scope.measure_channel(1, Measurement.DUTYCYCLE):.3f}")
+        print(f"FREQUENCY(1) = {scope.measure_channel(1, Measurement.FREQUENCY):.3f}")
+        print(f"VAMPLITUDE(1) = {scope.measure_channel(1, Measurement.VAMPLITUDE):.3f}")
+        print(f"VAVERAGE(1) = {scope.measure_channel(1, Measurement.VAVERAGE):.3f}")
+        print(f"VBASE(1) = {scope.measure_channel(1, Measurement.VBASE):.3f}")
+        print(f"VMAX(1) = {scope.measure_channel(1, Measurement.VMAX):.3f}")
+        print(f"VMIN(1) = {scope.measure_channel(1, Measurement.VMIN):.3f}")
+        print(f"VPP(1) = {scope.measure_channel(1, Measurement.VPP):.3f}")
+        vrms_ac = scope.measure_channel(1, Measurement.VRMS, "CYCLE", "AC")
+        print(f"VRMS_AC(1) = {vrms_ac:.3f}")
+        vrms_dc = scope.measure_channel(1, Measurement.VRMS, "CYCLE", "DC")
+        print(f"VRMS_DC(1) = {vrms_dc:.3f}")
+        print(f"VTOP(1) = {scope.measure_channel(1, Measurement.VTOP):.3f}")
 
         png = scope.get_png()
         path = "scope.png"
