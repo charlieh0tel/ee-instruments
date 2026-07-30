@@ -8,56 +8,24 @@ on:
 
 jobs:
   ci:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
     strategy:
       fail-fast: false
       matrix:
-        # Without this CI silently tests whatever interpreter it happens to
+        # Without a matrix, CI silently tests whatever interpreter it happens to
         # find, which is how the python-vxi11/xdrlib breakage on 3.13 went
         # unnoticed. 3.11 is the declared floor; 3.13 is where xdrlib was
         # removed, so it is the case the standard-xdrlib marker exists to cover.
         python-version: ["3.11", "3.12", "3.13"]
-    steps:
-    - uses: actions/checkout@v7
-
-    - name: Install uv
-      # Exact tag, not a floating major: setup-uv publishes moving major tags
-      # only up to v7, so `@v9` does not resolve even though v9.0.0 is current.
-      uses: astral-sh/setup-uv@v9.0.0
-      with:
-        enable-cache: true
-        python-version: ${{ matrix.python-version }}
-
-    - name: Install dependencies
-      run: uv sync --locked
-
-    - name: Lint
-      run: uv run ruff check .
-
-    - name: Check formatting
-      run: uv run ruff format --check .
-
-    # Smoke test: every dependency is justified by an import somewhere, so
-    # importing every module is what verifies the dependency list. The plot
-    # modules are the only consumers of matplotlib and pyarrow, and the cal_*
-    # scripts are what exercise cal_rf_sensor's SensorInfo. All are
-    # __main__-guarded, so importing them runs no instrument I/O.
-    - name: Import every module
-      env:
-        MPLBACKEND: Agg
-        PYTHONPATH: rf_sensor_measurements
-      run: |
-        uv run python -c "
-        import importlib, pathlib, sys
-        mods = sorted(
-            p.stem
-            for d in ('.', 'rf_sensor_measurements')
-            for p in pathlib.Path(d).glob('*.py')
-        )
-        for m in mods:
-            importlib.import_module(m)
-            print(f'ok {m}')
-        print(f'{len(mods)} modules imported')
-        "
+    # @v1, not @main: at the tag the workflow's own composite actions are
+    # pinned to @v1 too, so this pins the whole tree rather than just the entry
+    # point.
+    uses: charlieh0tel/deb-workflows/.github/workflows/python-ci.yml@v1
+    with:
+      python-version: ${{ matrix.python-version }}
+      # No unit tests -- the drivers need real instruments -- so the "test"
+      # slot runs the import smoke check instead. It must start with the tool
+      # name, so MPLBACKEND and sys.path are set inside the script.
+      test-command: "python tools/smoke_import.py"
+    # Defaults cover the rest: the workflow detects uv from uv.lock, then
+    # lock-check=auto makes the sync `--locked`, and lint/format run ruff from
+    # the locked project environment (ruff.toml pins the rule set).
