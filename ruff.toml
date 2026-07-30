@@ -1,0 +1,42 @@
+# target-version must be set explicitly: ruff only infers it from
+# project.requires-python when the config lives in pyproject.toml itself, not
+# from a standalone ruff.toml. Keep in sync with pyproject.toml.
+target-version = "py311"
+line-length = 88
+
+[lint]
+# Selected explicitly rather than relying on ruff's defaults, so a ruff upgrade
+# changes the enforced rule set only when this list changes.
+select = [
+    "E",     # pycodestyle errors
+    "W",     # pycodestyle warnings
+    "F",     # pyflakes
+    "I",     # import sorting
+    "UP",    # pyupgrade
+    "B",     # bugbear
+    "C4",    # comprehensions
+    "SIM",   # simplify
+    "PIE",   # misc lints
+    "PERF",  # perflint
+    "DTZ",   # naive datetimes
+    "EXE",   # shebang/executable-bit consistency
+    "ISC",   # implicit str concat
+    "FA",    # future annotations
+    "FLY",   # static str join
+    "G",     # logging format
+    "LOG",   # logging misuse
+    "BLE",   # blind except
+    "PLC",   # pylint conventions
+    "PLE",   # pylint errors
+]
+
+# Deliberately not selected:
+#   N      -- pep8-naming rejects the dBm/CF unit spellings these drivers use
+#             (min_dBm, power_levels_dBm). The names follow the instrument
+#             manuals; that is worth more than snake_case purity.
+#   PLR    -- PLR2004 (magic value in comparison) fires 23 times on the numeric
+#             constants that are the substance of instrument code.
+#   T20    -- these are CLI scripts; print() is their output, not a debug leftover.
+#   PTH, RET, RUF, ARG
+#          -- only 6 findings total, but each wants a code change; opt in
+#             separately rather than bundling edits into a config commit.
