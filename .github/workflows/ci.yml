@@ -14,10 +14,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Both ends of requires-python. Without this CI silently tests whatever
-        # interpreter it happens to find, which is how the python-vxi11/xdrlib
-        # breakage on 3.13 went unnoticed.
-        python-version: ["3.11", "3.12"]
+        # Without this CI silently tests whatever interpreter it happens to
+        # find, which is how the python-vxi11/xdrlib breakage on 3.13 went
+        # unnoticed. 3.11 is the declared floor; 3.13 is where xdrlib was
+        # removed, so it is the case the standard-xdrlib marker exists to cover.
+        python-version: ["3.11", "3.12", "3.13"]
     steps:
     - uses: actions/checkout@v7
 
