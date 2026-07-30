@@ -1,0 +1,21 @@
+[project]
+name = "ee-instruments"
+version = "0.1.0"
+description = "Python drivers for lab test equipment over GPIB/VISA/serial"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+dependencies = [
+    "beautifulsoup4",
+    "matplotlib",
+    "pandas",
+    "pyarrow",
+    "pyserial",
+    "pyvisa",
+    "pyvisa-py",
+    "python-vxi11",
+    "requests",
+]
+
+[dependency-groups]
+dev = ["pre-commit", "ruff"]
