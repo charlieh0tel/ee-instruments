@@ -1,19 +1,25 @@
 # Hooks are `local` + `system` on purpose: they shell out to `uv run ruff`, so
 # the ruff version is whatever uv.lock pins. A `ruff-pre-commit` repo/rev would
 # be a second version to keep in sync with the dev dependency group.
+#
+# --frozen matters: bare `uv run` implicitly re-resolves, so when a commit
+# touches pyproject.toml it would rewrite uv.lock as a side effect of linting.
+# pre-commit stashes unstaged changes around hooks, so that shows up as
+# "Stashed changes conflicted with hook auto-fixes" or, worse, silently leaves
+# uv.lock dirty after the commit. --frozen makes the hooks read-only.
 repos:
   - repo: local
     hooks:
       - id: ruff-check
         name: ruff check
-        entry: uv run ruff check --force-exclude
+        entry: uv run --frozen ruff check --force-exclude
         language: system
         types_or: [python, pyi]
         require_serial: true
 
       - id: ruff-format
         name: ruff format
-        entry: uv run ruff format --check --force-exclude
+        entry: uv run --frozen ruff format --check --force-exclude
         language: system
         types_or: [python, pyi]
         require_serial: true

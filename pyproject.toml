@@ -11,9 +11,11 @@ dependencies = [
     "matplotlib",
     "pandas",
     "pyarrow",
-    "pyserial",
     "pyvisa",
-    "pyvisa-py",
+    # [serial] pulls in pyserial, which nothing imports directly -- it is what
+    # enables pyvisa-py's ASRL/serial transport. Declared as an extra so it does
+    # not read as an unused dependency and get cleaned up later.
+    "pyvisa-py[serial]",
     "python-vxi11",
     "requests",
     # python-vxi11 does `import xdrlib` (vxi11/rpc.py), but PEP 594 removed

@@ -231,10 +231,9 @@ dependencies = [
     { name = "matplotlib" },
     { name = "pandas" },
     { name = "pyarrow" },
-    { name = "pyserial" },
     { name = "python-vxi11" },
     { name = "pyvisa" },
-    { name = "pyvisa-py" },
+    { name = "pyvisa-py", extra = ["serial"] },
     { name = "requests" },
     { name = "standard-xdrlib", marker = "python_full_version >= '3.13'" },
 ]
@@ -251,10 +250,9 @@ requires-dist = [
     { name = "matplotlib" },
     { name = "pandas" },
     { name = "pyarrow" },
-    { name = "pyserial" },
     { name = "python-vxi11" },
     { name = "pyvisa" },
-    { name = "pyvisa-py" },
+    { name = "pyvisa-py", extras = ["serial"] },
     { name = "requests" },
     { name = "standard-xdrlib", marker = "python_full_version >= '3.13'" },
 ]
@@ -956,6 +954,11 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/55/8d/0f1af2b39feca8868d0692a2c5d0c47f4ad559a051fb678c441fe1e99536/pyvisa_py-0.8.1.tar.gz", hash = "sha256:db53d3219d971d16b8f7c764a93e08475875063635b9ad8ea3c988439833ccdd", size = 102061, upload-time = "2025-09-04T20:48:21.639Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/70/0b/06ccf917ce30d78d75e452d0afc89236b1d384b776c5c33d75c8cc55fbe7/pyvisa_py-0.8.1-py3-none-any.whl", hash = "sha256:31208a2933c1793b4e829ba5f07d265b83f280668df440ee7ee6ac505dea4ee9", size = 82206, upload-time = "2025-09-04T20:48:20.13Z" },
+]
+
+[package.optional-dependencies]
+serial = [
+    { name = "pyserial" },
 ]
 
 [[package]]
