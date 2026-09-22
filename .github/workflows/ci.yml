@@ -30,3 +30,7 @@ jobs:
     # Defaults cover the rest: the workflow detects uv from uv.lock, then
     # lock-check=auto makes the sync `--locked`, and lint/format run ruff from
     # the locked project environment (ruff.toml pins the rule set).
+      # This is a uv project, so pip-audit runs against the locked project
+      # environment and nothing else -- none of the runner image's own
+      # packages, which is why the shared workflow leaves it off by default.
+      audit-command: pip-audit
