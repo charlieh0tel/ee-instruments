@@ -3,8 +3,8 @@
 Keysight InfiniiVision 3000T / 4000 X-Series scopes can run a CAN FD eye
 diagram test: they trigger on the bit-rate switch (BRS) bit, overlay the first
 10 data-phase bits of every frame aligned the way a receiver resynchronizes,
-and check them against a pass/fail mask (app note 5992-0437EN, "CAN FD
-Eye-Diagram Mask Testing"). It needs the DSOX4AUTO (CAN FD) and DSOX4MASK
+and check them against a pass/fail mask (Keysight app note 5992-0437EN,
+["CAN FD Eye-Diagram Mask Testing"](https://www.keysight.com/us/en/assets/7018-04704/application-notes/5992-0437.pdf)). It needs the DSOX4AUTO (CAN FD) and DSOX4MASK
 options and firmware 4.05 or later.
 
 Keysight only publishes masks for a 500 kbps nominal rate with 4-10 Mbps data.

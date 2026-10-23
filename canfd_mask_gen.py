@@ -3,7 +3,9 @@
 """Generate CAN FD eye-diagram mask files for Keysight InfiniiVision 3000T/4000X.
 
 Reproduces the structure of Keysight's published CAN-FD(L-H|H-L) 500k-xMbps.msk
-files (app note 5992-0437EN) for arbitrary nominal / data-phase bit rates.
+files (app note 5992-0437EN, "CAN FD Eye-Diagram Mask Testing",
+https://www.keysight.com/us/en/assets/7018-04704/application-notes/5992-0437.pdf)
+for arbitrary nominal / data-phase bit rates.
 
 Only three things in those files depend on bit rate:
   :MTES:SCAL:XDEL        horizontal span of the mask = 10 data-phase bits
