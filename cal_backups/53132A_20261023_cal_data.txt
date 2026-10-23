@@ -1,0 +1,13 @@
+HP 53132A calibration data backup
+
+Instrument:   HEWLETT-PACKARD,53132A,0,4613  (*IDN?; firmware 4613; no serial number reported)
+Interface:    E5810 LAN/GPIB gateway 10.0.1.162, gpib0,3 (VXI-11)
+Read:         2026-10-23T16:11:17-07:00 with :CAL:DATA?
+Cal count:    :CAL:COUN? = +12
+Errors:       :SYST:ERR? = +0,"No error" after each query
+File:         53132A_20261023_cal_data.bin, the reply exactly as received:
+              IEEE 488.2 definite-length block "#256" + 56 data bytes + newline (61 bytes)
+
+Restore with :CAL:DATA <block> (the same block, as sent back), only with the
+calibration security disabled; see the 53131A/132A/181A Programming Guide and
+Jared Cabot's 531xxA Firmware Supplement before writing anything.
