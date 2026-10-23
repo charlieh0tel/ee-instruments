@@ -43,6 +43,9 @@ uv run ./cal_8482a_sn2652a12432.py
 Use a `TCPIP::<host>::5025::SOCKET` resource for these: the MSO's VXI-11
 (`::INSTR`) server intermittently refuses connections.
 
+See [canfd_eye_testing.md](canfd_eye_testing.md) for how to use them, how the
+trigger window is derived, and what was verified on the scope.
+
 ## RF Sensor Calibration
 
 - **cal_rf_sensor** -- RF power sensor calibration utilities

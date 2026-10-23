@@ -56,10 +56,15 @@ class KeysightMSO:
             self.inst.close()
         self.inst = None
 
-    def get_png(self):
+    def get_png(self, timeout_ms=20000):
         assert self.inst
         self.inst.write(":HARDcopy:INKSaver OFF")
-        image = self.inst.query_binary_values(":DISP:DATA? PNG,COL", datatype="B")
+        # Slower than pyvisa's 2 s default while a mask test is running.
+        saved, self.inst.timeout = self.inst.timeout, timeout_ms
+        try:
+            image = self.inst.query_binary_values(":DISP:DATA? PNG,COL", datatype="B")
+        finally:
+            self.inst.timeout = saved
         return bytes(image)
 
     def errors(self):
@@ -127,6 +132,19 @@ class KeysightMSO:
         assert self.inst
         data = self.inst.query_binary_values(":MTESt:DATA?", datatype="B")
         return bytes(data).decode("ascii")
+
+    def mask_counts(self):
+        """(waveforms tested, waveforms failed, seconds tested) so far."""
+        assert self.inst
+        return (
+            int(self.inst.query(":MTESt:COUNt:WAVeforms?")),
+            int(self.inst.query(":MTESt:COUNt:FWAVeforms?")),
+            float(self.inst.query(":MTESt:COUNt:TIME?")),
+        )
+
+    def reset_mask_counts(self):
+        assert self.inst
+        self.inst.write(":MTESt:COUNt:RESet")
 
     def start_canfd_eye(self, data_bitrate):
         """Start the CAN FD eye-diagram test sequence on the loaded mask.

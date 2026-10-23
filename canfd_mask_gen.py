@@ -29,15 +29,21 @@ a power cycle.
 Examples:
   canfd_mask_gen.py 1M 2M --sp-min 70 --sp-max 80 --dsp 75
   canfd_mask_gen.py 500k 5M --polarity L-H -o masks/
-  canfd_mask_gen.py 1M 2M --sp-min 70 --sp-max 80 --dsp 75 --polarity L-H \
+  canfd_mask_gen.py 1M 2M --sp-min 70 --sp-max 80 --dsp 75 --polarity L-H \\
       --upload TCPIP::a-mx4054a-10545.local::5025::SOCKET --start
+  canfd_mask_gen.py 1M 2M --sp-min 70 --sp-max 80 --dsp 75 --polarity H-L \\
+      --upload TCPIP::a-mx4054a-10545.local::5025::SOCKET --collect   # ^C ends
   canfd_mask_gen.py --verify .      # regenerate Keysight's files and compare
 """
 
 import argparse
+import csv
 import math
 import re
+import signal
 import sys
+import time
+from datetime import datetime
 from pathlib import Path
 
 import pyvisa
@@ -229,7 +235,62 @@ def verify(directory):
     return 1 if failed else 0
 
 
-def upload(resource, text, channel, data, start, reset):
+def collect(scope, seconds, stem, interval):
+    """Print eye-test stats for seconds (math.inf: until Ctrl-C), then save the
+    stats history as <stem>.csv and a screenshot as <stem>.png.
+
+    The scope's own test time runs slower than the wall clock (it seems to
+    count only time spent testing), so both are recorded.
+    """
+    stop = False
+
+    def on_sigint(signum, frame):
+        nonlocal stop
+        stop = True
+
+    tty = sys.stdout.isatty()
+    rows = []
+    previous = signal.signal(signal.SIGINT, on_sigint)
+    try:
+        scope.reset_mask_counts()
+        start = time.monotonic()
+        while not stop:
+            remaining = seconds - (time.monotonic() - start)
+            if remaining <= 0:
+                break
+            time.sleep(min(interval, remaining))
+            tested, failed, test_s = scope.mask_counts()
+            wall_s = time.monotonic() - start
+            rate = failed / tested if tested else 0.0
+            rows.append(
+                (f"{wall_s:.1f}", f"{test_s:.1f}", tested, failed, f"{rate:.6f}")
+            )
+            line = f"{wall_s:7.1f} s  {tested:10d} tested  {failed:8d} failed  "
+            line += f"{100 * rate:8.4f} %"
+            print("\r" + line if tty else line, end="" if tty else "\n", flush=True)
+    finally:
+        signal.signal(signal.SIGINT, previous)
+    if tty:
+        print()
+
+    # Not with_suffix(): rate labels like 2.5Mbps contain dots.
+    csv_path = stem.parent / f"{stem.name}.csv"
+    png_path = stem.parent / f"{stem.name}.png"
+    with open(csv_path, "w", newline="") as f:
+        out = csv.writer(f)
+        out.writerow(["wall_s", "test_s", "tested", "failed", "failure_rate"])
+        out.writerows(rows)
+    print(csv_path)
+    png_path.write_bytes(scope.get_png())
+    print(png_path)
+    if rows and rows[-1][2] == 0:
+        print(
+            "nothing tested: no BRS triggers (traffic, level, --sp-*/--dsp?)",
+            file=sys.stderr,
+        )
+
+
+def upload(resource, text, channel, data, start, reset, collect_s, stem, interval):
     """Load the mask on the scope; start the eye test only if asked."""
     tseq = re.compile(r"^:MTES:TSEQ\S*\s.*\n?", re.MULTILINE)
     body = tseq.sub("", text.replace("\r\n", "\n"))
@@ -252,6 +313,9 @@ def upload(resource, text, channel, data, start, reset):
         if start:
             scope.start_canfd_eye(data)
             print(f"started CAN FD eye test at {rate_label(data)}bps")
+            if collect_s is not None:
+                collect(scope, collect_s, stem, interval)
+                print("eye test left running")
         else:
             print("eye test not started (pass --start once traffic is present)")
 
@@ -314,6 +378,21 @@ def main():
         help="with --upload, also start the eye test; needs CAN FD traffic present",
     )
     ap.add_argument(
+        "--collect",
+        nargs="?",
+        type=float,
+        const=math.inf,
+        metavar="SECONDS",
+        help="with --upload: start the eye test, print stats for SECONDS (no "
+        "value: until Ctrl-C), then save stats CSV and screenshot PNG",
+    )
+    ap.add_argument(
+        "--interval",
+        type=float,
+        default=1.0,
+        help="seconds between --collect stats readings (default 1)",
+    )
+    ap.add_argument(
         "--verify",
         metavar="DIR",
         help="check generator against Keysight's 500k files in DIR",
@@ -345,6 +424,12 @@ def main():
         )
     if args.upload and args.polarity == "both":
         ap.error("--upload needs --polarity L-H or H-L")
+    if args.collect is not None:
+        if not args.upload:
+            ap.error("--collect needs --upload")
+        if args.collect <= 0 or args.interval <= 0:
+            ap.error("--collect and --interval must be positive")
+        args.start = True
     if args.start and not args.upload:
         ap.error("--start needs --upload")
     if not 1 <= args.channel <= 4:
@@ -359,7 +444,18 @@ def main():
         print(outdir / name)
     print(f"BRS trigger window {brs_min * 1e9:.1f}-{brs_max * 1e9:.1f} ns")
     if args.upload:
-        upload(args.upload, text, args.channel, args.data, args.start, args.reset)
+        stamp = datetime.now().astimezone().strftime("%y%m%d-%H%M")
+        upload(
+            args.upload,
+            text,
+            args.channel,
+            args.data,
+            args.start,
+            args.reset,
+            args.collect,
+            outdir / f"{Path(name).stem}-{stamp}",
+            args.interval,
+        )
     return 0
 
 
