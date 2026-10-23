@@ -38,13 +38,16 @@ uv run ./cal_8482a_sn2652a12432.py
   bit rate (Keysight only ships 500k/4-10M); writes `.msk` files or loads the
   mask straight onto the scope with `--upload`
 - **canfd_frame_gen** -- plays a valid CAN FD frame (optionally with a fault)
-  on the scope's built-in wavegen, for testing masks without a bus
+  on the scope's built-in wavegen, for testing without a bus
+- **canfd_monitor** -- counts CAN FD frames, error frames, spec errors and bus
+  utilization with the scope's decoder, until Ctrl-C
 
 Use a `TCPIP::<host>::5025::SOCKET` resource for these: the MSO's VXI-11
 (`::INSTR`) server intermittently refuses connections.
 
-See [canfd_eye_testing.md](canfd_eye_testing.md) for how to use them, how the
-trigger window is derived, and what was verified on the scope.
+See [canfd_eye_testing.md](canfd_eye_testing.md) (eye masks: usage, how the
+trigger window is derived, what was verified on the scope) and
+[canfd_monitoring.md](canfd_monitoring.md) (traffic and error counting).
 
 ## RF Sensor Calibration
 

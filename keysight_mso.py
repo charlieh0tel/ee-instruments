@@ -112,6 +112,99 @@ class KeysightMSO:
         for pod in (1, 2):
             self.inst.write(f":POD{pod}:DISPlay 0")
 
+    def prepare_channel(self, channel, reset=True):
+        """Get to a known state with only this channel on, as Keysight's CAN FD
+        app note starts: mask test off (exiting any eye test, so *RST can't
+        wedge the scope), Default Setup unless reset is False, channel solo.
+
+        Returns probe_info() from before the reset; pass it to check_probe()
+        once set up, so an AutoProbe's own settings can't be silently undone.
+        """
+        self.stop_mask_test()
+        probe = self.probe_info(channel)
+        if reset:
+            self.reset()
+        self.solo_channel(channel)
+        return probe
+
+    def check_probe(self, channel, before):
+        if (after := self.probe_info(channel)) != before:
+            raise RuntimeError(
+                f"CHAN{channel} probe settings changed: {before} -> {after}"
+            )
+
+    def setup_canfd_decode(self, channel, nominal, data, sp, dsp, level, trigger):
+        """CAN FD (ISO) decode on serial bus 1, differential probe on channel.
+
+        sp/dsp are sample points in percent. level is the decode threshold in
+        volts: its sign picks dominant-high (DIFH) or dominant-low (DIFL)
+        probing. trigger is a :SBUS1:CAN:TRIGger value, e.g. ALLerrors.
+        """
+        assert self.inst
+        assert 1 <= channel <= 4
+        src = f"CHAN{channel}"
+        self.errors()  # drop stale entries, e.g. from an earlier session
+        # The decoder thresholds at the channel's trigger level.
+        self.inst.write(":TRIGger:MODE EDGE")
+        self.inst.write(f":TRIGger:EDGE:SOURce {src}")
+        self.inst.write(f":TRIGger:EDGE:LEVel {level}")
+        for cmd in (
+            ":SBUS1:MODE CAN",
+            f":SBUS1:CAN:SOURce {src}",
+            f":SBUS1:CAN:SIGNal:DEFinition {'DIFH' if level > 0 else 'DIFL'}",
+            f":SBUS1:CAN:SIGNal:BAUDrate {int(nominal)}",
+            f":SBUS1:CAN:SIGNal:FDBaudrate {int(data)}",
+            f":SBUS1:CAN:SAMPlepoint {sp}",
+            f":SBUS1:CAN:FDSPoint {dsp}",
+            ":SBUS1:CAN:FDSTandard ISO",
+            ":SBUS1:DISPlay 1",
+            ":LISTer:DISPlay SBUS1",
+            ":TRIGger:MODE SBUS1",
+            f":SBUS1:CAN:TRIGger {trigger}",
+            ":TRIGger:SWEep NORMal",
+            ":RUN",
+        ):
+            self.inst.write(cmd)
+        if errs := self.errors():
+            raise RuntimeError(f"CAN FD decode setup failed: {errs}")
+
+    def can_counts(self):
+        """Serial bus 1 CAN totals since the last reset_can_counts().
+
+        Counted in hardware, so they cover all traffic, not just what was
+        captured: frames, error frames, spec errors (malformed frames: CRC,
+        stuff, form...), overload frames, utilization in %. A frame with a
+        bad CRC counted as both a frame and a spec error; one with a flipped
+        data bit (bad CRC and stuff count) only as a spec error.
+        """
+        assert self.inst
+        q = self.inst.query
+        return {
+            "frames": int(q(":SBUS1:CAN:COUNt:TOTal?")),
+            "error_frames": int(q(":SBUS1:CAN:COUNt:ERRor?")),
+            "spec_errors": int(q(":SBUS1:CAN:COUNt:SPEC?")),
+            "overload": int(q(":SBUS1:CAN:COUNt:OVERload?")),
+            "utilization": float(q(":SBUS1:CAN:COUNt:UTILization?")),
+        }
+
+    def reset_can_counts(self):
+        assert self.inst
+        self.inst.write(":SBUS1:CAN:COUNt:RESet")
+
+    def get_lister(self, timeout_ms=20000):
+        """The decode lister for the current acquisition, as CSV text.
+
+        Only ask after something has triggered: with no acquisition the query
+        never answers.
+        """
+        assert self.inst
+        saved, self.inst.timeout = self.inst.timeout, timeout_ms
+        try:
+            data = self.inst.query_binary_values(":LISTer:DATA?", datatype="B")
+        finally:
+            self.inst.timeout = saved
+        return bytes(data).decode("ascii", errors="replace")
+
     def load_mask(self, mask_text, channel=1):
         """Load .msk file contents over SCPI, as recalling it from USB would.
 

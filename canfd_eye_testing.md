@@ -27,7 +27,7 @@ uv run ./canfd_mask_gen.py 1M 2M --sp-min 70 --sp-max 80 --dsp 75 \
 This writes the `.msk` file, puts the scope in Default Setup with only the
 probed channel on, loads the mask, starts the eye test, and prints the running
 totals until Ctrl-C (or give `--collect SECONDS`). It then saves
-`runs/CAN-FD(H-L) 1M-2Mbps-YYMMDD-HHMM.csv` (totals once a second) and `.png`
+`runs/CAN-FD(H-L) 1M-2Mbps-YYMMDD-HHMMSS.csv` (totals once a second) and `.png`
 (the screen: eye, mask, statistics) and leaves the test running on the scope.
 
 Other modes: no `--upload` just writes `.msk` files for a USB stick (both

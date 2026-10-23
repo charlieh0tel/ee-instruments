@@ -237,13 +237,9 @@ def verify(directory):
     return 1 if failed else 0
 
 
-def collect(scope, seconds, stem, interval):
-    """Print eye-test stats for seconds (math.inf: until Ctrl-C), then save the
-    stats history as <stem>.csv and a screenshot as <stem>.png.
-
-    The scope's own test time runs slower than the wall clock (it seems to
-    count only time spent testing), so both are recorded.
-    """
+def poll(seconds, interval, sample):
+    """Call sample(wall_s) -> (csv_row, status_line) every interval for seconds
+    (math.inf: until Ctrl-C), showing the line; returns the rows."""
     stop = False
 
     def on_sigint(signum, frame):
@@ -254,37 +250,62 @@ def collect(scope, seconds, stem, interval):
     rows = []
     previous = signal.signal(signal.SIGINT, on_sigint)
     try:
-        scope.reset_mask_counts()
         start = time.monotonic()
         while not stop:
             remaining = seconds - (time.monotonic() - start)
             if remaining <= 0:
                 break
             time.sleep(min(interval, remaining))
-            tested, failed, test_s = scope.mask_counts()
-            wall_s = time.monotonic() - start
-            rate = failed / tested if tested else 0.0
-            rows.append(
-                (f"{wall_s:.1f}", f"{test_s:.1f}", tested, failed, f"{rate:.6f}")
-            )
-            line = f"{wall_s:7.1f} s  {tested:10d} tested  {failed:8d} failed  "
-            line += f"{100 * rate:8.4f} %"
+            row, line = sample(time.monotonic() - start)
+            rows.append(row)
             print("\r" + line if tty else line, end="" if tty else "\n", flush=True)
     finally:
         signal.signal(signal.SIGINT, previous)
     if tty:
         print()
+    return rows
 
-    # Not with_suffix(): rate labels like 2.5Mbps contain dots.
+
+def run_stem(outdir, base):
+    """outdir/<base>-YYMMDD-HHMMSS. Not checked for existence (that would
+    race); save_run() creates files exclusively instead."""
+    return outdir / f"{base}-{datetime.now().astimezone():%y%m%d-%H%M%S}"
+
+
+def save_run(stem, header, rows, png):
+    """Create <stem>.csv and <stem>.png, failing rather than overwriting an
+    existing file. Not with_suffix(): rate labels like 2.5Mbps contain dots."""
     csv_path = stem.parent / f"{stem.name}.csv"
-    png_path = stem.parent / f"{stem.name}.png"
-    with open(csv_path, "w", newline="") as f:
+    with open(csv_path, "x", newline="") as f:
         out = csv.writer(f)
-        out.writerow(["wall_s", "test_s", "tested", "failed", "failure_rate"])
+        out.writerow(header)
         out.writerows(rows)
     print(csv_path)
-    png_path.write_bytes(scope.get_png())
+    png_path = stem.parent / f"{stem.name}.png"
+    with open(png_path, "xb") as f:
+        f.write(png)
     print(png_path)
+
+
+def collect(scope, seconds, stem, interval):
+    """Print eye-test stats for seconds (math.inf: until Ctrl-C), then save the
+    stats history as <stem>.csv and a screenshot as <stem>.png.
+
+    The scope's own test time runs slower than the wall clock (it seems to
+    count only time spent testing), so both are recorded.
+    """
+
+    def sample(wall_s):
+        tested, failed, test_s = scope.mask_counts()
+        rate = failed / tested if tested else 0.0
+        row = (f"{wall_s:.1f}", f"{test_s:.1f}", tested, failed, f"{rate:.6f}")
+        line = f"{wall_s:7.1f} s  {tested:10d} tested  {failed:8d} failed  "
+        return row, line + f"{100 * rate:8.4f} %"
+
+    scope.reset_mask_counts()
+    rows = poll(seconds, interval, sample)
+    header = ["wall_s", "test_s", "tested", "failed", "failure_rate"]
+    save_run(stem, header, rows, scope.get_png())
     if rows and rows[-1][2] == 0:
         print(
             "nothing tested: no BRS triggers (traffic, level, --sp-*/--dsp?)",
@@ -297,21 +318,11 @@ def upload(resource, text, channel, data, start, reset, collect_s, stem, interva
     tseq = re.compile(r"^:MTES:TSEQ\S*\s.*\n?", re.MULTILINE)
     body = tseq.sub("", text.replace("\r\n", "\n"))
     with KeysightMSO(pyvisa.ResourceManager("@py"), resource) as scope:
-        scope.stop_mask_test()  # exit any eye test still running from before
-        # An AutoProbe (e.g. N2818A) sets impedance and attenuation itself;
-        # nothing here may change them.
-        probe = scope.probe_info(channel)
-        # The app note's first step: only the bus channel may be on.
-        if reset:
-            scope.reset()
-        scope.solo_channel(channel)
+        probe = scope.prepare_channel(channel, reset)
         scope.load_mask(body, channel)
         print(f"loaded mask on {resource} CHAN{channel}")
         print("probe {}, {:g}:1, {}".format(*probe))
-        if (after := scope.probe_info(channel)) != probe:
-            raise RuntimeError(
-                f"CHAN{channel} probe settings changed: {probe} -> {after}"
-            )
+        scope.check_probe(channel, probe)
         if start:
             scope.start_canfd_eye(data)
             print(f"started CAN FD eye test at {rate_label(data)}bps")
@@ -446,7 +457,6 @@ def main():
         print(outdir / name)
     print(f"BRS trigger window {brs_min * 1e9:.1f}-{brs_max * 1e9:.1f} ns")
     if args.upload:
-        stamp = datetime.now().astimezone().strftime("%y%m%d-%H%M")
         upload(
             args.upload,
             text,
@@ -455,7 +465,7 @@ def main():
             args.start,
             args.reset,
             args.collect,
-            outdir / f"{Path(name).stem}-{stamp}",
+            run_stem(outdir, Path(name).stem),
             args.interval,
         )
     return 0

@@ -15,6 +15,9 @@ Levels are the differential voltage as the N2818A would show it: dominant
 bit N (1 = ESI), inside the 0.5-0.9 V keep-out zone. It needs N to be a
 dominant bit; ESI always is. Use it to check that the mask catches faults.
 
+--bad-crc flips the last CRC bit, so every frame is malformed: canfd_monitor
+should count them all as spec errors and none as good frames.
+
 Loopback eye test, in this order: canfd_mask_gen's *RST would stop the
 wavegen, and *RST during a running eye test has wedged the scope.
   R=TCPIP::a-mx4054a-10545.local::5025::SOCKET
@@ -181,6 +184,9 @@ def main():
     ap.add_argument(
         "--dip", type=int, metavar="N", help="fault: dip in data-phase bit N (1=ESI)"
     )
+    ap.add_argument(
+        "--bad-crc", action="store_true", help="fault: flip the last CRC bit"
+    )
     ap.add_argument("--upload", metavar="RESOURCE", help="play it on this scope")
     ap.add_argument(
         "--off",
@@ -206,6 +212,9 @@ def main():
 
     try:
         fb, tags = frame_bits(args.id, args.payload)
+        if args.bad_crc:
+            # The last data-phase bit, just before the CRC delimiter.
+            fb[tags.index("crcdel") - 1] ^= 1
         dur = durations_ps(args.nominal, args.data, args.sp / 100, args.dsp / 100)
         values, period = waveform(fb, tags, dur, args.dip)
     except ValueError as e:
