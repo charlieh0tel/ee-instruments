@@ -1,0 +1,14 @@
+Agilent 53230A calibration data backup
+
+Instrument:   Agilent Technologies,53230A,MY50001726,03.02-1924.2831-1.19-4.16-127-159-35  (*IDN?)
+Interface:    LXI, A-53230A-01726.local (10.0.1.67), SCPI socket port 5025
+Read:         2026-10-23T16:12:49-07:00 with :CAL:DATA?
+Cal count:    :CAL:COUN? = +27
+Cal string:   :CAL:STR? = "27Nov12 23C"
+Security:     :CAL:SEC:STAT? = 0
+Errors:       :SYST:ERR? = +0,"No error" after the read
+File:         53230A_SNMY50001726_20261023_cal_data.bin, the reply exactly as received:
+              IEEE 488.2 definite-length block "#3482" + 482 data bytes + newline (488 bytes)
+
+Restore with :CAL:DATA <block> (the same block, as sent back); see the
+53220A/53230A programming guide before writing anything.
