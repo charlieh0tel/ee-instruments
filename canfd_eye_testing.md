@@ -143,6 +143,8 @@ Seen on the MSO-X 4054A, firmware 07.60:
   nothing. Over USB, `:MTESt:ENABle 0` on an eye test running with real
   traffic never answered (30 s) and wedged it, every time; the tools refuse
   instead (see above). The scope may also restore a running test at power-up.
+  Over USB, any query that times out also leaves the USB interface dead until
+  a reboot (pyvisa-py's USBTMC abort fails), so the tools use a 30 s timeout.
 - `:MTESt:DATA <block>` loads a `.msk` file's contents, `:MTESt:DATA?` returns
   them. Over SCPI the `%d` channel placeholders in the setup section must be
   filled in by the sender.
