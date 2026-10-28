@@ -57,17 +57,35 @@ running eye test is turned off over SCPI. So:
 
 3. **Analyze.** Look at the PNG with the Read tool and work through the CSV.
    Cover, from what is actually visible and in the numbers:
-   - the verdict: frames tested, failed, failure rate;
-   - whether failures are steady or bursty (per-interval rate across the run);
+   - the verdict: frames tested, failed, failure rate. Say what the rate
+     means: the share of captured waveforms that touched a keep-out zone at
+     least once. It is not a bit or frame error rate; relate it to decoder
+     results (e.g. a monitor run's protocol errors) if any are known. Call it
+     a verdict on the bus, not the DUT, unless only the DUT transmits;
+   - whether failures are steady or bursty: per-interval rate across the
+     run, per-minute (or 30 s) rates, and whether the interval-to-interval
+     scatter is more than counting noise (sd of a binomial rate at that
+     interval's frame count);
    - recessive and dominant levels (read them against the vertical scale and
      offset shown on screen), and whether there are several dominant levels
      (more than one transmitting node);
-   - where the red violations sit on the mask: early or late in the bit,
-     upper or lower edge of the keep-out zone, and what that means (late or
-     slow edges, low amplitude, noise);
+   - where the red violations sit on the mask. Look at every keep-out zone
+     and describe each red cluster: its position along the zone (start,
+     inside, end), upper or lower edge, which transition direction runs
+     through it, and what that means (late or slow edges, low amplitude,
+     noise). Don't generalize from one cluster;
    - ringing, overshoot, or reflections at the edges;
+   - alignment: the eye is only valid if every capture starts on the BRS bit.
+     Note the trigger window the run printed, which pulses it excludes, and
+     that the screen alone doesn't confirm alignment. A consistent early or
+     late edge pattern could also come from misaligned captures;
    - how many frames per second were tested versus the bus rate, if known.
-   End with what to check next. State only what the screen and data show;
+   End with what to check next. Always consider: finding which node sends
+   the failing frames (stop on mask failure, read the ID from the decoder
+   list), capturing one failing waveform to confirm BRS alignment,
+   termination (about 60 Ω across CAN_H/CAN_L, bus off) and stubs, and
+   single-ended CAN_H and CAN_L measurements to tell a slow edge on one wire
+   from a common-mode problem. State only what the screen and data show;
    say so when something can't be told from them.
 
    Write this as an HTML fragment (`<p>`, `<ul>`, `<h3>`; no `<style>`, no
@@ -82,7 +100,9 @@ running eye test is turned off over SCPI. So:
        --analysis "<stem>-analysis.html" \
        --param "Nominal rate=1 Mbit/s" --param "Data rate=2 Mbit/s" \
        --param "Nominal sample point=70-80 %" --param "Data sample point=75 %" \
-       --param "Polarity=L-H (dominant low)" --param "Input=50 Ω, probe 10:1" \
+       --param "Polarity=L-H (dominant low)" \
+       --param "Probe=N2792A differential, 10:1, high impedance at the bus" \
+       --param "Scope input=50 Ω (terminates the probe output)" \
        --param "Mask=<the .msk file name>" --param "Duration=<seconds> s" \
        --out "<stem>.html"
    ```
