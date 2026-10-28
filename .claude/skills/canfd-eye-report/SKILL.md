@@ -38,7 +38,9 @@ running eye test is turned off over SCPI. So:
    so its make, model and serial number come from the user. If the request
    doesn't give all three, ask for them before touching the scope. If an
    earlier run in this conversation named a DUT, offer to reuse it but
-   confirm: the serial number changes when the unit does.
+   confirm: the serial number changes when the unit does. Also take any
+   bench measurements the user gives (termination resistance, cable length,
+   node count, stub lengths); don't hold up the run asking for them.
 
 1. **Check the scope.** Run
    `uv run python .claude/skills/canfd-eye-report/scope_info.py RESOURCE`
@@ -83,7 +85,10 @@ running eye test is turned off over SCPI. So:
    End with what to check next. Always consider: finding which node sends
    the failing frames (stop on mask failure, read the ID from the decoder
    list), capturing one failing waveform to confirm BRS alignment,
-   termination (about 60 Ω across CAN_H/CAN_L, bus off) and stubs, and
+   termination (about 60 Ω across CAN_H/CAN_L, bus off; if the user
+   measured it, use the value instead of suggesting it: at 60 Ω look to
+   stubs, connectors and bus capacitance for ringing and slow recessive
+   edges) and stubs, and
    single-ended CAN_H and CAN_L measurements to tell a slow edge on one wire
    from a common-mode problem. State only what the screen and data show;
    say so when something can't be told from them.
@@ -106,7 +111,9 @@ running eye test is turned off over SCPI. So:
        --param "Mask=<the .msk file name>" --param "Duration=<seconds> s" \
        --out "<stem>.html"
    ```
-   Set the `--param` values to what was actually run.
+   Set the `--param` values to what was actually run, and add one per bench
+   measurement the user gave, e.g.
+   `--param "Termination=60 Ω measured (CAN_H to CAN_L, bus off)"`.
 
 5. **Publish.** Call the Artifact tool with `action: "quickstart"` and
    `intent: "other"` first, as its rules require for a new artifact. The
