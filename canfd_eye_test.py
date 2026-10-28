@@ -1,6 +1,9 @@
 #!/usr/bin/env python
 
-"""Generate CAN FD eye-diagram mask files for Keysight InfiniiVision 3000T/4000X.
+"""Run a CAN FD eye-diagram mask test on a Keysight InfiniiVision 3000T/4000X.
+
+Generates the mask for any bit rates and, with --scope, loads it and runs the
+test.
 
 Reproduces the structure of Keysight's published CAN-FD(L-H|H-L) 500k-xMbps.msk
 files (app note 5992-0437EN, "CAN FD Eye-Diagram Mask Testing",
@@ -22,20 +25,20 @@ and copied unchanged.
 Keysight only publishes masks for 500k / 4-10M, but firmware 07.60 on an
 MSO-X 4054A accepts other sequencer rates (2M ok; nonsense values get -222).
 
---upload also loads the mask onto a scope over VISA: mask test off (exiting
+--scope also loads the mask onto a scope over VISA: mask test off (exiting
 any running eye test), Default Setup (*RST; --no-reset to skip), every channel
 but --channel off, then the mask. The TSEQ line is held back and sent on its
 own, only with --start: sent inside the mask upload it wedged the scope until
 a power cycle.
 
 Examples:
-  canfd_mask_gen.py 1M 2M --sp-min 70 --sp-max 80 --dsp 75
-  canfd_mask_gen.py 500k 5M --polarity L-H -o masks/
-  canfd_mask_gen.py 1M 2M --sp-min 70 --sp-max 80 --dsp 75 --polarity L-H \\
-      --upload TCPIP::a-mx4054a-10545.local::5025::SOCKET --start
-  canfd_mask_gen.py 1M 2M --sp-min 70 --sp-max 80 --dsp 75 --polarity H-L \\
-      --upload TCPIP::a-mx4054a-10545.local::5025::SOCKET --collect   # ^C ends
-  canfd_mask_gen.py --verify .      # regenerate Keysight's files and compare
+  canfd_eye_test.py 1M 2M --sp-min 70 --sp-max 80 --dsp 75
+  canfd_eye_test.py 500k 5M --polarity L-H -o masks/
+  canfd_eye_test.py 1M 2M --sp-min 70 --sp-max 80 --dsp 75 --polarity L-H \\
+      --scope TCPIP::a-mx4054a-10545.local::5025::SOCKET --start
+  canfd_eye_test.py 1M 2M --sp-min 70 --sp-max 80 --dsp 75 --polarity H-L \\
+      --scope TCPIP::a-mx4054a-10545.local::5025::SOCKET --collect   # ^C ends
+  canfd_eye_test.py --verify .      # regenerate Keysight's files and compare
 """
 
 import argparse
@@ -53,6 +56,8 @@ import pyvisa
 from keysight_mso import KeysightMSO
 
 NUM_BITS = 10  # sequencer tests the first 10 data-phase bits
+# --impedance choices -> :CHANnel:IMPedance values.
+IMPEDANCES = {"50": "FIFT", "1M": "ONEM"}
 
 # Polarity-dependent setup values, copied from Keysight's files.
 POLARITY = {
@@ -313,12 +318,26 @@ def collect(scope, seconds, stem, interval):
         )
 
 
-def upload(resource, text, channel, data, start, reset, collect_s, stem, interval):
+def upload(
+    resource,
+    text,
+    channel,
+    impedance,
+    attenuation,
+    data,
+    start,
+    reset,
+    collect_s,
+    stem,
+    interval,
+):
     """Load the mask on the scope; start the eye test only if asked."""
     tseq = re.compile(r"^:MTES:TSEQ\S*\s.*\n?", re.MULTILINE)
     body = tseq.sub("", text.replace("\r\n", "\n"))
     with KeysightMSO(pyvisa.ResourceManager("@py"), resource) as scope:
-        probe = scope.prepare_channel(channel, reset)
+        probe = scope.prepare_channel(
+            channel, reset, IMPEDANCES[impedance], attenuation
+        )
         scope.load_mask(body, channel)
         print(f"loaded mask on {resource} CHAN{channel}")
         print("probe {}, {:g}:1, {}".format(*probe))
@@ -349,8 +368,8 @@ def main():
     ap.add_argument(
         "--polarity",
         choices=["L-H", "H-L", "both"],
-        default="both",
-        help="L-H = dominant low, H-L = dominant high (default both)",
+        help="L-H = dominant low, H-L = dominant high (default: L-H with "
+        "--scope, else both)",
     )
     ap.add_argument(
         "--sp-min",
@@ -372,7 +391,7 @@ def main():
     )
     ap.add_argument("-o", "--outdir", default=".", help="output directory")
     ap.add_argument(
-        "--upload",
+        "--scope",
         metavar="RESOURCE",
         help="also load the mask onto a scope (VISA resource)",
     )
@@ -380,15 +399,30 @@ def main():
         "--channel", type=int, default=1, help="scope input with the probe (default 1)"
     )
     ap.add_argument(
+        "--impedance",
+        choices=IMPEDANCES,
+        default="50",
+        help="scope input impedance: 50 for the differential probe, 1M for the "
+        "wavegen self-test (default 50)",
+    )
+    ap.add_argument(
+        "--probe",
+        type=float,
+        default=10.0,
+        metavar="RATIO",
+        help="probe attenuation, N for N:1, for a probe the scope doesn't "
+        "identify (default 10); 1 for the wavegen self-test",
+    )
+    ap.add_argument(
         "--no-reset",
         dest="reset",
         action="store_false",
-        help="with --upload, skip the Default Setup (*RST) done before loading",
+        help="with --scope, skip the Default Setup (*RST) done before loading",
     )
     ap.add_argument(
         "--start",
         action="store_true",
-        help="with --upload, also start the eye test; needs CAN FD traffic present",
+        help="with --scope, also start the eye test; needs CAN FD traffic present",
     )
     ap.add_argument(
         "--collect",
@@ -396,7 +430,7 @@ def main():
         type=float,
         const=math.inf,
         metavar="SECONDS",
-        help="with --upload: start the eye test, print stats for SECONDS (no "
+        help="with --scope: start the eye test, print stats for SECONDS (no "
         "value: until Ctrl-C), then save stats CSV and screenshot PNG",
     )
     ap.add_argument(
@@ -435,16 +469,20 @@ def main():
             f"BRS window starts at {brs_min * 1e9:.0f} ns, at or below the "
             f"{crc_del * 1e9:.0f} ns CRC delimiter. Raise --sp-min."
         )
-    if args.upload and args.polarity == "both":
-        ap.error("--upload needs --polarity L-H or H-L")
+    if args.polarity is None:
+        args.polarity = "L-H" if args.scope else "both"
+    if args.scope and args.polarity == "both":
+        ap.error("--scope needs --polarity L-H or H-L")
     if args.collect is not None:
-        if not args.upload:
-            ap.error("--collect needs --upload")
+        if not args.scope:
+            ap.error("--collect needs --scope")
         if args.collect <= 0 or args.interval <= 0:
             ap.error("--collect and --interval must be positive")
         args.start = True
-    if args.start and not args.upload:
-        ap.error("--start needs --upload")
+    if args.start and not args.scope:
+        ap.error("--start needs --scope")
+    if args.probe <= 0:
+        ap.error("--probe must be positive")
     if not 1 <= args.channel <= 4:
         ap.error("--channel must be 1-4")
 
@@ -456,11 +494,13 @@ def main():
         (outdir / name).write_bytes(text.encode("ascii"))
         print(outdir / name)
     print(f"BRS trigger window {brs_min * 1e9:.1f}-{brs_max * 1e9:.1f} ns")
-    if args.upload:
+    if args.scope:
         upload(
-            args.upload,
+            args.scope,
             text,
             args.channel,
+            args.impedance,
+            args.probe,
             args.data,
             args.start,
             args.reset,

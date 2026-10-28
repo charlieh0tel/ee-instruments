@@ -8,34 +8,43 @@ and check them against a pass/fail mask (Keysight app note 5992-0437EN,
 options and firmware 4.05 or later.
 
 Keysight only publishes masks for a 500 kbps nominal rate with 4-10 Mbps data.
-`canfd_mask_gen.py` makes them for any rates and can load them and run the test
+`canfd_eye_test.py` makes them for any rates and can load them and run the test
 over SCPI. `canfd_frame_gen.py` plays a CAN FD frame on the scope's own wavegen
 so the whole thing can be checked without a bus.
 
 ## Quick start: real bus
 
-Probe with a differential probe such as the N2818A (its AutoProbe interface
-sets the input to 50 Ω and 10:1 by itself). Red lead on CAN_H shows dominant
-bits high: use `--polarity H-L`. Red lead on CAN_L shows them low: `L-H`.
+Probe with a differential probe. The tools set the channel up for it after
+the Default Setup, which leaves 1 MΩ and 1:1: `--impedance` (default 50 Ω) and
+`--probe` attenuation (default 10 for 10:1). The defaults suit the N2792A
+(10:1, needs 50 Ω), which the scope can't identify (no AutoProbe) and which
+takes its own power (9 V battery or USB). Red lead on CAN_L shows dominant
+bits low: `--polarity L-H`, the default (how our fixture is wired). Red lead
+on CAN_H shows them high: `H-L`.
 
 ```sh
 R=TCPIP::a-mx4054a-10545.local::5025::SOCKET
-uv run ./canfd_mask_gen.py 1M 2M --sp-min 70 --sp-max 80 --dsp 75 \
-    --polarity H-L -o runs/ --upload $R --collect
+uv run ./canfd_eye_test.py 1M 2M --sp-min 70 --sp-max 80 --dsp 75 \
+    -o runs/ --scope $R --collect
 ```
 
 This writes the `.msk` file, puts the scope in Default Setup with only the
 probed channel on, loads the mask, starts the eye test, and prints the running
 totals until Ctrl-C (or give `--collect SECONDS`). It then saves
-`runs/CAN-FD(H-L) 1M-2Mbps-YYMMDD-HHMMSS.csv` (totals once a second) and `.png`
+`runs/CAN-FD(L-H) 1M-2Mbps-YYMMDD-HHMMSS.csv` (totals once a second) and `.png`
 (the screen: eye, mask, statistics) and leaves the test running on the scope.
+Over USB, turn it off on the front panel (Analyze > Features: Mask) before the
+next run: exiting it over USB wedges the scope, so the tools refuse to start
+while it is on. Over the network they turn it off themselves.
 
-Other modes: no `--upload` just writes `.msk` files for a USB stick (both
-polarities unless one is given); `--upload` without `--start`/`--collect` loads
-the mask but does not start the test; `--no-reset` skips the Default Setup.
+Other modes: no `--scope` just writes `.msk` files for a USB stick (both
+polarities unless one is given); `--scope` without `--start`/`--collect` loads
+the mask but does not start the test; `--no-reset` skips the Default Setup
+(impedance and attenuation are still set).
 
-The upload reads the channel's probe ID, attenuation and impedance before the
-reset and again after loading, and stops with an error if they changed, so an
+The upload reads the channel's probe ID and attenuation before the reset and
+again after loading, and stops with an error if they changed or the impedance
+or attenuation isn't the one asked for, so an
 AutoProbe's settings can't be silently undone. (Checked only with no probe
 attached so far.)
 
@@ -75,24 +84,27 @@ recessive, ≥ 0.9 V dominant). It sits low in a 0-2 V eye because the threshold
 do; real transmitters drive 1.5-3 V dominant, leaving more margin above. This
 geometry does not depend on bit rate and is copied unchanged from Keysight's
 files; only the mask's time span, the trigger window and the sequencer rate
-change. `canfd_mask_gen.py --verify DIR` regenerates Keysight's ten 500k files
+change. `canfd_eye_test.py --verify DIR` regenerates Keysight's ten 500k files
 and compares them numerically (all match).
 
 ## Self-test without a bus
 
 Cable the wavegen output (Gen Out) to the channel with a BNC. The wavegen's
-50 Ω source is set for a high-Z load and channel 1 is 1 MΩ, so it delivers
-0-2 V; no terminator needed for a short cable.
+50 Ω source is set for a high-Z load, so the channel must be 1 MΩ
+(`--impedance 1M`, and `--probe 1`: no probe) for it to deliver 0-2 V; no
+terminator needed for a short
+cable.
 
 ```sh
 R=TCPIP::a-mx4054a-10545.local::5025::SOCKET
-uv run ./canfd_frame_gen.py 1M 2M --sp 75 --dsp 75 --polarity H-L --upload $R
-uv run ./canfd_mask_gen.py 1M 2M --sp-min 70 --sp-max 80 --dsp 75 \
-    --polarity H-L --upload $R --no-reset --collect 10
-uv run ./canfd_frame_gen.py 1M 2M --off --upload $R
+uv run ./canfd_frame_gen.py 1M 2M --sp 75 --dsp 75 --polarity H-L --scope $R
+uv run ./canfd_eye_test.py 1M 2M --sp-min 70 --sp-max 80 --dsp 75 \
+    --polarity H-L --scope $R --no-reset --impedance 1M --probe 1 \
+    --collect 10
+uv run ./canfd_frame_gen.py 1M 2M --off --scope $R
 ```
 
-Order matters: `canfd_mask_gen`'s Default Setup would turn the wavegen off, so
+Order matters: `canfd_eye_test`'s Default Setup would turn the wavegen off, so
 play the frame first and load the mask with `--no-reset`. `--off` turns the
 eye test off before the wavegen.
 
@@ -128,7 +140,9 @@ Seen on the MSO-X 4054A, firmware 07.60:
   therefore send that line on its own and turn the mask test off
   (`:MTESt:ENABle 0`, the app note's way out of the test) before any reset.
   Starting the test with no signal present did not wedge it; it just tested
-  nothing.
+  nothing. Over USB, `:MTESt:ENABle 0` on an eye test running with real
+  traffic never answered (30 s) and wedged it, every time; the tools refuse
+  instead (see above). The scope may also restore a running test at power-up.
 - `:MTESt:DATA <block>` loads a `.msk` file's contents, `:MTESt:DATA?` returns
   them. Over SCPI the `%d` channel placeholders in the setup section must be
   filled in by the sender.

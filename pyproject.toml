@@ -24,6 +24,7 @@ dependencies = [
     # redistribution of the stdlib module and satisfies that import unchanged.
     # Remove this once python-vxi11 is gone -- see the pyvisa port issue.
     "standard-xdrlib; python_version >= '3.13'",
+    "pyusb>=1.3.1",
 ]
 
 [dependency-groups]

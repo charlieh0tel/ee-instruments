@@ -13,12 +13,12 @@ Runs for --seconds or until Ctrl-C, then saves <stem>.csv (totals over time),
 <stem>.png (screen) and <stem>-lister.csv (the decoder's frame list for that
 acquisition), with stem "CAN-FD(H-L) 1M-2Mbps monitor-YYMMDD-HHMMSS".
 
-Like canfd_mask_gen --upload it first exits any eye test, does a Default Setup
+Like canfd_eye_test --scope it first exits any eye test, does a Default Setup
 (--no-reset to skip), turns off the other channels, and stops if the probe's
 reported settings changed. See canfd_eye_testing.md.
 
 Examples:
-  canfd_monitor.py 1M 2M --sp 75 --dsp 75 --polarity H-L \\
+  canfd_monitor.py 1M 2M --sp 75 --dsp 75 --polarity L-H \\
       --scope TCPIP::a-mx4054a-10545.local::5025::SOCKET
   canfd_monitor.py 1M 2M --scope $R --seconds 600 --trigger CRCerror -o runs/
 """
@@ -30,7 +30,7 @@ from pathlib import Path
 
 import pyvisa
 
-from canfd_mask_gen import parse_rate, poll, rate_label, run_stem, save_run
+from canfd_eye_test import IMPEDANCES, parse_rate, poll, rate_label, run_stem, save_run
 from keysight_mso import KeysightMSO
 
 # :SBUS1:CAN:TRIGger values for faults, as accepted by a 4054A (fw 07.60).
@@ -62,8 +62,8 @@ def main():
     ap.add_argument(
         "--polarity",
         choices=["L-H", "H-L"],
-        default="H-L",
-        help="H-L = dominant high (+ lead on CAN_H), L-H = dominant low",
+        default="L-H",
+        help="L-H = dominant low (+ lead on CAN_L), H-L = dominant high (default L-H)",
     )
     ap.add_argument(
         "--level",
@@ -74,6 +74,21 @@ def main():
     ap.add_argument("--scope", metavar="RESOURCE", required=True, help="VISA resource")
     ap.add_argument(
         "--channel", type=int, default=1, help="scope input with the probe (default 1)"
+    )
+    ap.add_argument(
+        "--impedance",
+        choices=IMPEDANCES,
+        default="50",
+        help="scope input impedance: 50 for the differential probe, 1M for the "
+        "wavegen self-test (default 50)",
+    )
+    ap.add_argument(
+        "--probe",
+        type=float,
+        default=10.0,
+        metavar="RATIO",
+        help="probe attenuation, N for N:1, for a probe the scope doesn't "
+        "identify (default 10); 1 for the wavegen self-test",
     )
     ap.add_argument(
         "--trigger",
@@ -98,6 +113,8 @@ def main():
 
     if not (0 < args.sp < 100 and 0 < args.dsp < 100):
         ap.error("sample points must be between 0 and 100 %")
+    if args.probe <= 0:
+        ap.error("--probe must be positive")
     if not 1 <= args.channel <= 4:
         ap.error("--channel must be 1-4")
     if args.seconds <= 0 or args.interval <= 0:
@@ -114,7 +131,9 @@ def main():
     stem = run_stem(outdir, f"CAN-FD({args.polarity}) {rates} monitor")
 
     with KeysightMSO(pyvisa.ResourceManager("@py"), args.scope) as scope:
-        probe = scope.prepare_channel(args.channel, args.reset)
+        probe = scope.prepare_channel(
+            args.channel, args.reset, IMPEDANCES[args.impedance], args.probe
+        )
         scope.setup_canfd_decode(
             args.channel,
             args.nominal,
