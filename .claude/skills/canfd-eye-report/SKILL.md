@@ -18,7 +18,13 @@ Everything runs from the repo root (`/home/ch/src/ee-instruments`) with
 
 - Resource: `USB0::0x0957::0x17B2::MY54310545::0::INSTR` (MSO-X 4054A on USB)
 - Test: `1M 2M --sp-min 70 --sp-max 80 --dsp 75`, polarity and probe from the
-  tool defaults (L-H, 50 Ω, 10:1 for the N2792A)
+  tool defaults (L-H, `--impedance 50`, `--probe 10`)
+- Probe: Keysight N2792A differential probe, the one normally used. 10:1,
+  high impedance at the bus (it is what loads the CAN bus); its output needs
+  the scope's 50 Ω input. It has no AutoProbe, so the scope reports probe
+  `NONE` and the tools set ratio and impedance; it takes its own power. If
+  the user names a different probe, set `--probe` and `--impedance` to suit
+  it and describe that probe in the report instead.
 - Output directory: `runs-YYYYMMDD` (today's date)
 
 ## Scope safety (over USB) - read first
