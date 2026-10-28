@@ -2,13 +2,13 @@
 
 """Play an ISO CAN FD frame on a Keysight InfiniiVision's built-in wavegen.
 
-A stand-in bus for checking CAN FD masks (see canfd_mask_gen) without a real
+A stand-in bus for checking CAN FD masks (see canfd_eye_test) without a real
 network: cable Gen Out to the scope input and play one frame repeatedly. The
 frame has real bit stuffing, stuff count and CRC-17, and switches bit rate at
 the BRS and CRC-delimiter sample points, so the scope's CAN FD decoder accepts
 it and the BRS pulse has the width a real node would give it.
 
-Levels are the differential voltage as the N2818A would show it: dominant
+Levels are the differential voltage as a differential probe shows it: dominant
 2 V and recessive 0 V, positive for H-L probing and negative for L-H.
 
 --dip N drops the level to 0.6 V (or -0.6 V) for the middle fifth of data-phase
@@ -18,17 +18,17 @@ dominant bit; ESI always is. Use it to check that the mask catches faults.
 --bad-crc flips the last CRC bit, so every frame is malformed: canfd_monitor
 should count them all as spec errors and none as good frames.
 
-Loopback eye test, in this order: canfd_mask_gen's *RST would stop the
+Loopback eye test, in this order: canfd_eye_test's *RST would stop the
 wavegen, and *RST during a running eye test has wedged the scope.
   R=TCPIP::a-mx4054a-10545.local::5025::SOCKET
-  canfd_frame_gen.py 1M 2M --sp 75 --dsp 75 --polarity H-L --upload $R
-  canfd_mask_gen.py 1M 2M --sp-min 70 --sp-max 80 --dsp 75 --polarity H-L \\
-      --upload $R --no-reset --start
-  canfd_frame_gen.py 1M 2M --off --upload $R
+  canfd_frame_gen.py 1M 2M --sp 75 --dsp 75 --polarity H-L --scope $R
+  canfd_eye_test.py 1M 2M --sp-min 70 --sp-max 80 --dsp 75 --polarity H-L \\
+      --scope $R --no-reset --impedance 1M --probe 1 --start
+  canfd_frame_gen.py 1M 2M --off --scope $R
 
 Other examples:
-  canfd_frame_gen.py 1M 2M --dip 1 --upload TCPIP::a-mx4054a-10545.local::5025::SOCKET
-  canfd_frame_gen.py 1M 2M --off --upload TCPIP::a-mx4054a-10545.local::5025::SOCKET
+  canfd_frame_gen.py 1M 2M --dip 1 --scope TCPIP::a-mx4054a-10545.local::5025::SOCKET
+  canfd_frame_gen.py 1M 2M --off --scope TCPIP::a-mx4054a-10545.local::5025::SOCKET
   canfd_frame_gen.py 1M 2M          # just print the frame
 """
 
@@ -38,7 +38,7 @@ import sys
 
 import pyvisa
 
-from canfd_mask_gen import parse_rate
+from canfd_eye_test import parse_rate
 from keysight_mso import KeysightMSO
 
 CRC17_POLY = 0x1685B  # x^17+x^16+x^14+x^13+x^11+x^6+x^4+x^3+x+1, x^17 implicit
@@ -169,8 +169,8 @@ def main():
     ap.add_argument(
         "--polarity",
         choices=["L-H", "H-L"],
-        default="H-L",
-        help="H-L = dominant +2 V, L-H = dominant -2 V (default H-L)",
+        default="L-H",
+        help="L-H = dominant -2 V, H-L = dominant +2 V (default L-H)",
     )
     ap.add_argument(
         "--id", type=lambda s: int(s, 0), default=0x123, help="11-bit ID (0x123)"
@@ -187,11 +187,11 @@ def main():
     ap.add_argument(
         "--bad-crc", action="store_true", help="fault: flip the last CRC bit"
     )
-    ap.add_argument("--upload", metavar="RESOURCE", help="play it on this scope")
+    ap.add_argument("--scope", metavar="RESOURCE", help="play it on this scope")
     ap.add_argument(
         "--off",
         action="store_true",
-        help="with --upload, stop any running eye test, then turn the wavegen off",
+        help="with --scope, stop any running eye test, then turn the wavegen off",
     )
     args = ap.parse_args()
 
@@ -199,12 +199,12 @@ def main():
         ap.error("--id must be 11 bits")
     if not (0 < args.sp < 100 and 0 < args.dsp < 100):
         ap.error("sample points must be between 0 and 100 %")
-    if args.off and not args.upload:
-        ap.error("--off needs --upload")
+    if args.off and not args.scope:
+        ap.error("--off needs --scope")
 
     if args.off:
-        with KeysightMSO(pyvisa.ResourceManager("@py"), args.upload) as scope:
-            # Eye test off first, as canfd_mask_gen does before its *RST.
+        with KeysightMSO(pyvisa.ResourceManager("@py"), args.scope) as scope:
+            # Eye test off first, as canfd_eye_test does before its *RST.
             scope.stop_mask_test()
             scope.wgen_off()
         print("mask test off, wavegen off")
@@ -228,15 +228,15 @@ def main():
         f"{len(values)} points at {period / 1e3:g} ns"
     )
 
-    if args.upload:
+    if args.scope:
         sign = 1 if args.polarity == "H-L" else -1
         if sign < 0:
             values = [-v for v in values]
         low, high = sorted((0.0, sign * DOMINANT_V))
         frequency = 1e12 / (len(values) * period)
-        with KeysightMSO(pyvisa.ResourceManager("@py"), args.upload) as scope:
+        with KeysightMSO(pyvisa.ResourceManager("@py"), args.scope) as scope:
             scope.wgen_arb(values, frequency, low, high)
-        print(f"playing on {args.upload} at {frequency:.2f} Hz")
+        print(f"playing on {args.scope} at {frequency:.2f} Hz")
     return 0
 
 

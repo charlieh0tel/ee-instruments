@@ -45,6 +45,10 @@ class KeysightMSO:
                 self.inst = self.resource_manager.open_resource(
                     self.resource_name, **kwargs
                 )
+                # pyvisa's 2 s default is tight for slow replies, and over
+                # USB a timed-out query leaves the scope's USB interface dead
+                # until it is rebooted.
+                self.inst.timeout = 30000
                 return self
             except pyvisa.errors.VisaIOError:
                 if attempt == attempts - 1:
@@ -92,8 +96,20 @@ class KeysightMSO:
 
         Do this before *RST or before stopping the traffic: *RST sent while a
         sequence was running has wedged the scope until power-cycled.
+
+        Over USB, exiting a running eye test with real traffic never answers
+        and wedges the scope too, so there it raises instead: turn the test
+        off on the front panel. Over the network it has worked.
         """
         assert self.inst
+        if not int(self.inst.query(":MTESt:ENABle?")):
+            return
+        if self.resource_name.upper().startswith("USB"):
+            raise RuntimeError(
+                "mask test is on: over USB, turning it off can wedge the scope "
+                "until power-cycled. Turn it off on the front panel (Analyze > "
+                "Features: Mask) and run again."
+            )
         self.inst.write(":MTESt:ENABle 0")
         self.inst.query("*OPC?")
 
@@ -112,19 +128,28 @@ class KeysightMSO:
         for pod in (1, 2):
             self.inst.write(f":POD{pod}:DISPlay 0")
 
-    def prepare_channel(self, channel, reset=True):
+    def prepare_channel(self, channel, reset=True, impedance=None, attenuation=None):
         """Get to a known state with only this channel on, as Keysight's CAN FD
         app note starts: mask test off (exiting any eye test, so *RST can't
-        wedge the scope), Default Setup unless reset is False, channel solo.
+        wedge the scope), Default Setup unless reset is False, channel solo,
+        then input impedance ("FIFT" or "ONEM") and probe attenuation if
+        given, for a probe the scope can't identify: *RST leaves 1 MOhm, 1:1.
 
-        Returns probe_info() from before the reset; pass it to check_probe()
-        once set up, so an AutoProbe's own settings can't be silently undone.
+        Returns probe_info() from before the reset, with the settings asked
+        for; pass it to check_probe() once set up, so an AutoProbe's own
+        settings can't be silently undone.
         """
         self.stop_mask_test()
         probe = self.probe_info(channel)
         if reset:
             self.reset()
         self.solo_channel(channel)
+        if impedance is not None:
+            self.inst.write(f":CHANnel{channel}:IMPedance {impedance}")
+            probe = (*probe[:2], impedance)
+        if attenuation is not None:
+            self.inst.write(f":CHANnel{channel}:PROBe {attenuation:g}")
+            probe = (probe[0], float(attenuation), probe[2])
         return probe
 
     def check_probe(self, channel, before):
@@ -144,6 +169,11 @@ class KeysightMSO:
         assert 1 <= channel <= 4
         src = f"CHAN{channel}"
         self.errors()  # drop stale entries, e.g. from an earlier session
+        # As the eye-test masks do: 600 mV/div, dominant level on screen.
+        # *RST leaves 5 V/div, times the probe ratio: at 10:1 an ADC step is
+        # ~1.6 V and the decoder sees nothing.
+        self.inst.write(f":CHANnel{channel}:SCALe 0.6")
+        self.inst.write(f":CHANnel{channel}:OFFSet {0.6 if level > 0 else -0.6}")
         # The decoder thresholds at the channel's trigger level.
         self.inst.write(":TRIGger:MODE EDGE")
         self.inst.write(f":TRIGger:EDGE:SOURce {src}")
