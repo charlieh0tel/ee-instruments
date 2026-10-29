@@ -24,7 +24,9 @@ and fetches waveform data only once the capture is complete.
 """
 
 import argparse
+import contextlib
 import csv
+import io
 import math
 import sys
 import time
@@ -39,7 +41,21 @@ from keysight_mso import KeysightMSO
 THRESHOLD = 0.7  # differential volts, as the glitch trigger and decoder use
 # (default; --level changes it, and a capture's meta records the one used)
 HYSTERESIS = 0.05  # volts each side of the threshold, for pulses()
-RUN_BIT = 8  # :OPERegister:CONDition? bit 3, set while acquiring
+RUN_BIT = 8
+# suggest: highest trigger level as a fraction of the weakest dominant level,
+# and the levels --auto tries, lowest first. On the wavegen, 68 % (1.4 V on
+# 2.05 V) caught every frame; 78 % (0.7 V on 0.9 V) missed half.
+LEVEL_FRACTION = 0.7
+AUTO_LEVELS = (
+    0.7,
+    0.85,
+    1.0,
+    1.1,
+    1.2,
+    1.3,
+    1.4,
+    1.5,
+)  # :OPERegister:CONDition? bit 3, set while acquiring
 
 
 def us(seconds):
@@ -420,7 +436,78 @@ def analyze(path):
     return 0
 
 
+def dominant_levels(paths):
+    """Median dominant level (V, magnitude) per CAN ID, from SOF captures.
+
+    Measured where only the sender drives: the res bit before BRS and the
+    data-phase dominant bits after it, middle half of each pulse.
+    """
+    by_id = {}
+    for path in paths:
+        d = np.load(path, allow_pickle=True)
+        meta = d["meta"].item()
+        timing = (meta["nominal"], meta["data"], meta["sp"] / 100, meta["dsp"] / 100)
+        t, sign = d["t"], meta["sign"]
+        for v in d["segs"]:
+            ps = pulses(t, v, sign, meta.get("level", THRESHOLD))
+            hdr = decode_header(ps, *timing, t_from=-2e-6)
+            if not hdr or hdr["brs_end"] is None:
+                continue
+            start = hdr["brs_end"] - hdr["brs_width"]
+            vals = []
+            for p in ps:
+                res = abs(p[2] - start) < 1e-12
+                data = hdr["brs_end"] <= p[1] < hdr["brs_end"] + 6e-6
+                if p[0] == 1 and (res or data) and p[2] < t[-1]:
+                    a, b = np.searchsorted(t, [p[1], p[2]])
+                    q = (b - a) // 4
+                    vals.append(sign * v[a + q : b - q])
+            if vals:
+                by_id.setdefault(hdr["id"], []).append(np.median(np.concatenate(vals)))
+    return {k: float(np.median(v)) for k, v in by_id.items()}
+
+
 def suggest(args):
+    """Check the level against the senders' dominant levels, then propose a
+    window at that level, or with --auto at the lowest level that has one."""
+    doms = dominant_levels(args.npz)
+    if not doms:
+        print("no error-active CAN FD frames with BRS decoded")
+        return 1
+    print("dominant level, V (res and data-phase bits)")
+    for k in sorted(doms):
+        print(f"{f'0x{k:X}':>10} {doms[k]:7.2f}")
+    limit = LEVEL_FRACTION * min(doms.values())
+    print(
+        f"highest usable level {limit:.2f} V "
+        f"({LEVEL_FRACTION:.0%} of the weakest dominant level)"
+    )
+    if not args.auto:
+        if args.level and args.level > limit:
+            print(f"--level {args.level:g} is above that: weak senders would be missed")
+            return 1
+        return suggest_at(args)
+    tried = []
+    for level in AUTO_LEVELS:
+        if level > limit:
+            break
+        args.level = level
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            rc = suggest_at(args)
+        if rc == 0:
+            for lv in tried:
+                print(f"level {lv:g} V: no safe window")
+            print(out.getvalue(), end="")
+            return 0
+        tried.append(level)
+    print(
+        "no safe window at any level up to "
+        f"{limit:.2f} V (tried {', '.join(f'{x:g}' for x in tried) or 'none'})"
+    )
+    return 1
+
+
+def suggest_at(args):
     """Propose a BRS trigger window from SOF captures: the BRS widths of
     error-active frames, and the nearest other recessive pulses on each side
     (CRC delimiter below; lone nominal bits, FDF, 2-bit data runs above)."""
@@ -638,6 +725,11 @@ def main():
         metavar="V",
         help="re-measure pulse widths at this level magnitude, V (default: the "
         "capture's, 0.7 for older files)",
+    )
+    su.add_argument(
+        "--auto",
+        action="store_true",
+        help="try levels from 0.7 V up and use the lowest with a safe window",
     )
     args = ap.parse_args()
     if getattr(args, "level", None) is not None and args.level <= 0:
