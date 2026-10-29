@@ -16,7 +16,10 @@ Everything runs from the repo root (`/home/ch/src/ee-instruments`) with
 
 ## Defaults
 
-- Resource: `USB0::0x0957::0x17B2::MY54310545::0::INSTR` (MSO-X 4054A on USB)
+- Resource: `USB0::0x0957::0x17B2::MY54310545::0::INSTR` (MSO-X 4054A on
+  USB). If step 1 fails with "No device found" (the PC doesn't see it on
+  USB), use the network: `TCPIP::a-mx4054a-10545::5025::SOCKET`. If neither
+  answers, stop and ask the user to check the scope.
 - Test: `1M 2M --sp-min 70 --sp-max 80 --dsp 75`, polarity and probe from the
   tool defaults (L-H, `--impedance 50`, `--probe 10`)
 - Probe: Keysight N2792A differential probe, the one normally used. 10:1,
@@ -63,19 +66,20 @@ running eye test is turned off over SCPI. So:
    reports failures that aren't in the signal. With the mask test off:
    - Measure: `uv run ./canfd_trigger_check.py segments 1M 2M --trigger sof --segments 500 --scope RESOURCE -o <outdir>`.
      It prints each ID's BRS width; keep the `.npz` path.
-   - Choose: `uv run ./canfd_trigger_check.py suggest <npz> --level L` for
-     L = 0.7, 1.0, 1.2, 1.4 in turn; use the lowest level that gives a
-     window. Keep L well below the weakest dominant level on screen (a
-     threshold near the dominant level misses frames). If no level works,
-     stop: say so, with the BRS widths and the nearest other pulses.
+   - Choose: `uv run ./canfd_trigger_check.py suggest <npz> --auto`. It
+     measures each ID's dominant level, tries trigger levels from 0.7 V up
+     to 70 % of the weakest one, and prints `--window LO-HI --level L` for
+     the lowest level with a safe window. If it finds none, stop: say so,
+     with the BRS widths, dominant levels and nearest other pulses it
+     printed.
    - Check: `uv run ./canfd_trigger_check.py segments 1M 2M --trigger glitch --window LO-HI --level L --segments 500 --scope RESOURCE -o <outdir>`.
      It must report 0 wrong. Ambiguous segments (frame start outside the
      record) are allowed but go in the report. Any wrong trigger: stop and
      report it; don't run the eye test.
 
-   Over USB these captures have not been tried yet; they avoid the commands
-   known to wedge the scope (see Scope safety), but stop at the first
-   timeout.
+   These captures have run over the network; over USB they have not been
+   tried yet. They avoid the commands known to wedge the scope (see Scope
+   safety), but stop at the first timeout.
 
 3. **Run the test.**
    `uv run ./canfd_eye_test.py 1M 2M --sp-min 70 --sp-max 80 --dsp 75 --window LO-HI --level L -o <outdir> --scope RESOURCE --collect <seconds>`

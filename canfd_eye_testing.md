@@ -91,18 +91,19 @@ Measure the bus and set the window from it, with the mask test off:
 
 ```sh
 uv run ./canfd_trigger_check.py segments 1M 2M --trigger sof --scope $R -o runs
-uv run ./canfd_trigger_check.py suggest runs/trig-sof-....npz --level 0.7
+uv run ./canfd_trigger_check.py suggest runs/trig-sof-....npz --auto
 uv run ./canfd_trigger_check.py segments 1M 2M --trigger glitch \
     --window LO-HI --level L --scope $R -o runs
 uv run ./canfd_eye_test.py 1M 2M --sp-min 70 --sp-max 80 --dsp 75 \
     --window LO-HI --level L --scope $R --collect 60
 ```
 
-`suggest` prints each ID's BRS width and the nearest other recessive pulses,
-and proposes a window, or says none is safe at that level. Raising the level
-toward the dominant level shortens the pulses less; try 1.0, 1.2, 1.4 V, but
-keep it well below the weakest node's dominant level or its frames are
-missed. The glitch-triggered check labels every capture BRS or wrong; it
+`suggest` prints each ID's BRS width, dominant level and the nearest other
+recessive pulses, and proposes a window, or says none is safe. Raising the
+level toward the dominant level shortens the pulses less, but too close to
+it and weak nodes' frames are missed: `--auto` tries levels from 0.7 V up
+to 70 % of the weakest dominant level and takes the lowest that works
+(`--level V` checks one level). The glitch-triggered check labels every capture BRS or wrong; it
 must report no wrong triggers.
 
 On the wavegen, two senders (BRS 800 and 900 ns, 150 and 50 ns ramps): the
