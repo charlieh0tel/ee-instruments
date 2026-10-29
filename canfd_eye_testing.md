@@ -76,6 +76,40 @@ refuses one that doesn't:
 The defaults (`--sp-min 75 --sp-max 87.5`) suit 500 kbps; at 1 Mbps they reach
 a whole bit and are rejected.
 
+## Setting the window from the bus
+
+The computed window assumes ideal edges. On a real bus the
+dominant-to-recessive edge is not driven: it decays through the termination,
+so every recessive pulse is shorter at the trigger level than its bit time.
+At about 60 ns of shortening the BRS falls below the window and 1 us bits
+fall into it; the eye test then overlays the wrong bits and fails a clean
+signal. On the wavegen, a frame with 100 ns recessive-going ramps failed
+4 % of tests with the computed window; nodes with different edge speeds or
+sample points make it worse.
+
+Measure the bus and set the window from it, with the mask test off:
+
+```sh
+uv run ./canfd_trigger_check.py segments 1M 2M --trigger sof --scope $R -o runs
+uv run ./canfd_trigger_check.py suggest runs/trig-sof-....npz --level 0.7
+uv run ./canfd_trigger_check.py segments 1M 2M --trigger glitch \
+    --window LO-HI --level L --scope $R -o runs
+uv run ./canfd_eye_test.py 1M 2M --sp-min 70 --sp-max 80 --dsp 75 \
+    --window LO-HI --level L --scope $R --collect 60
+```
+
+`suggest` prints each ID's BRS width and the nearest other recessive pulses,
+and proposes a window, or says none is safe at that level. Raising the level
+toward the dominant level shortens the pulses less; try 1.0, 1.2, 1.4 V, but
+keep it well below the weakest node's dominant level or its frames are
+missed. The glitch-triggered check labels every capture BRS or wrong; it
+must report no wrong triggers.
+
+On the wavegen, two senders (BRS 800 and 900 ns, 150 and 50 ns ramps): the
+computed window put half the triggers on the wrong bits and the eye test
+failed 6 %; `--window 700-897 --level 1.4` from `suggest` gave 500 of 500
+triggers on BRS and 0 failures.
+
 ## The mask
 
 Each of the 10 bits gets a hexagon from 30 % to 80 % of the bit time between
