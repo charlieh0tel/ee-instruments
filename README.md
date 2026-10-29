@@ -37,8 +37,11 @@ uv run ./cal_8482a_sn2652a12432.py
 - **canfd_eye_test** -- CAN FD eye-diagram mask test for any nominal/data bit
   rate (Keysight only ships 500k/4-10M masks); writes `.msk` files, or with
   `--scope` loads the mask and runs the eye test
-- **canfd_frame_gen** -- plays a valid CAN FD frame (optionally with a fault)
-  on the scope's built-in wavegen, for testing without a bus
+- **canfd_frame_gen** -- plays valid CAN FD frames (optionally with a fault,
+  slow edges, or several senders) on the scope's built-in wavegen, for
+  testing without a bus
+- **canfd_trigger_check** -- measures the bus's BRS widths, suggests the eye
+  test's trigger window, and checks that every trigger lands on a BRS bit
 - **canfd_monitor** -- counts CAN FD frames, error frames, spec errors and bus
   utilization with the scope's decoder, until Ctrl-C
 - **mso_grab_png** -- writes a screenshot to stdout, fetched from the scope's

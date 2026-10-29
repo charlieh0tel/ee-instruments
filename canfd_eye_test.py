@@ -55,6 +55,7 @@ import pyvisa
 
 from keysight_mso import KeysightMSO
 
+GLITCH_LEVEL = 0.7  # default glitch trigger level magnitude, V (Keysight's)
 NUM_BITS = 10  # sequencer tests the first 10 data-phase bits
 # --impedance choices -> :CHANnel:IMPedance values.
 IMPEDANCES = {"50": "FIFT", "1M": "ONEM"}
@@ -67,7 +68,7 @@ POLARITY = {
         "y2": "-5.0E-01",
         "offset": "-1.6E-0",
         "glitch_pol": "POSitive",
-        "glitch_level": "-0.7",
+        "glitch_sign": -1,
     },
     # dominant-bit high: + lead on CAN_H
     "H-L": {
@@ -75,7 +76,7 @@ POLARITY = {
         "y2": "9.0E-01",
         "offset": "600E-03",
         "glitch_pol": "NEGative",
-        "glitch_level": "0.7",
+        "glitch_sign": 1,
     },
 }
 
@@ -87,6 +88,17 @@ def parse_rate(text):
         raise argparse.ArgumentTypeError(f"bad bit rate: {text!r}")
     mult = {"": 1, "k": 1e3, "m": 1e6}[m.group(2).lower()]
     return round(float(m.group(1)) * mult)
+
+
+def parse_window(text):
+    """'820-900' (ns) -> (820e-9, 900e-9) seconds."""
+    m = re.fullmatch(r"\s*([0-9.]+)\s*-\s*([0-9.]+)\s*(?:ns)?\s*", text)
+    if not m:
+        raise argparse.ArgumentTypeError(f"bad window, want LO-HI in ns: {text!r}")
+    lo, hi = float(m.group(1)) * 1e-9, float(m.group(2)) * 1e-9
+    if not 0 < lo < hi:
+        raise argparse.ArgumentTypeError(f"need 0 < LO < HI: {text!r}")
+    return lo, hi
 
 
 def rate_label(bps):
@@ -148,9 +160,13 @@ def crc_delimiter(nominal, data, sp_min, dsp):
     return dsp / data + (1 - sp_min) / nominal
 
 
-def build_mask(nominal, data, polarity, sp_min, sp_max, dsp):
+def build_mask(
+    nominal, data, polarity, sp_min, sp_max, dsp, window=None, level=GLITCH_LEVEL
+):
+    """window: (shortest, longest) BRS pulse in s, overriding brs_window().
+    level: glitch trigger level magnitude, V; the sign follows polarity."""
     p = POLARITY[polarity]
-    brs_min, brs_max = brs_window(nominal, data, sp_min, sp_max, dsp)
+    brs_min, brs_max = window or brs_window(nominal, data, sp_min, sp_max, dsp)
     xdel = NUM_BITS / data
     title = f"CAN-FD({polarity}) {rate_label(nominal)}-{rate_label(data)}bps"
 
@@ -179,7 +195,7 @@ def build_mask(nominal, data, polarity, sp_min, sp_max, dsp):
         f":TRIGger:GLITch:RANGe {us(brs_max)},{us(brs_min)}",
         ":TRIGger:GLITch:SOURce CHAN%d",
         f":TRIGger:GLITch:POLarity {p['glitch_pol']}",
-        f":TRIGger:GLITch:LEVel {p['glitch_level']},CHAN%d",
+        f":TRIGger:GLITch:LEVel {p['glitch_sign'] * level:g},CHAN%d",
         ":TRIGger:NREJect ON",
         ":DISP:INT:WAV 75",
         ":ACQ:MODE RTIM",
@@ -389,6 +405,22 @@ def main():
         default=75.0,
         help="data-phase sample point, %% (default 75)",
     )
+    ap.add_argument(
+        "--window",
+        type=parse_window,
+        metavar="LO-HI",
+        help="BRS trigger window in ns, e.g. 790-880, instead of the one "
+        "computed from the sample points: for a bus whose measured recessive "
+        "pulses are shorter (canfd_trigger_check.py suggest)",
+    )
+    ap.add_argument(
+        "--level",
+        type=float,
+        default=GLITCH_LEVEL,
+        metavar="V",
+        help=f"glitch trigger level magnitude, V; the sign follows the polarity "
+        f"(default {GLITCH_LEVEL:g})",
+    )
     ap.add_argument("-o", "--outdir", default=".", help="output directory")
     ap.add_argument(
         "--scope",
@@ -457,18 +489,29 @@ def main():
     if args.data <= args.nominal:
         ap.error("data-phase rate must be higher than nominal rate")
     sp_min, sp_max, dsp = args.sp_min / 100, args.sp_max / 100, args.dsp / 100
-    brs_min, brs_max = brs_window(args.nominal, args.data, sp_min, sp_max, dsp)
+    if args.level <= 0:
+        ap.error("--level must be positive (its sign follows --polarity)")
+    window = args.window
+    brs_min, brs_max = window or brs_window(
+        args.nominal, args.data, sp_min, sp_max, dsp
+    )
     if brs_max >= 1 / args.nominal:
         ap.error(
             f"BRS window reaches {brs_max * 1e9:.0f} ns, a whole nominal bit: it "
-            "would trigger on any lone recessive bit. Lower --sp-max."
+            "would trigger on any lone recessive bit. "
+            + ("Lower HI in --window." if window else "Lower --sp-max.")
         )
     crc_del = crc_delimiter(args.nominal, args.data, sp_min, dsp)
     if brs_min <= crc_del:
-        ap.error(
+        msg = (
             f"BRS window starts at {brs_min * 1e9:.0f} ns, at or below the "
-            f"{crc_del * 1e9:.0f} ns CRC delimiter. Raise --sp-min."
+            f"{crc_del * 1e9:.0f} ns CRC delimiter (nominal)"
         )
+        if not window:
+            ap.error(msg + ". Raise --sp-min.")
+        # Measured pulses on a slow bus are all shorter than nominal, the CRC
+        # delimiter too: trust the measurement, but say so.
+        print(f"warning: {msg}; check it against measured widths", file=sys.stderr)
     if args.polarity is None:
         args.polarity = "L-H" if args.scope else "both"
     if args.scope and args.polarity == "both":
@@ -490,10 +533,16 @@ def main():
     outdir.mkdir(parents=True, exist_ok=True)
     pols = ["L-H", "H-L"] if args.polarity == "both" else [args.polarity]
     for pol in pols:
-        name, text = build_mask(args.nominal, args.data, pol, sp_min, sp_max, dsp)
+        name, text = build_mask(
+            args.nominal, args.data, pol, sp_min, sp_max, dsp, window, args.level
+        )
         (outdir / name).write_bytes(text.encode("ascii"))
         print(outdir / name)
-    print(f"BRS trigger window {brs_min * 1e9:.1f}-{brs_max * 1e9:.1f} ns")
+    print(
+        f"BRS trigger window {brs_min * 1e9:.1f}-{brs_max * 1e9:.1f} ns"
+        + (" (--window)" if window else "")
+        + ("" if args.level == GLITCH_LEVEL else f", level {args.level:g} V")
+    )
     if args.scope:
         upload(
             args.scope,
