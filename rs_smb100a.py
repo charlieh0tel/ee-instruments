@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import math
 import sys
 import time
 
@@ -50,6 +51,24 @@ class RhodeSchwarzSMB100A:
         assert self.inst
         self._check_frequency(frequency_hz)
         self.inst.write(f":FREQ {frequency_hz}")
+
+    def set_fm(self, rate_hz: float, deviation_hz: float):
+        """Frequency modulates from the internal LF generator."""
+        assert self.inst
+        self.inst.write(":FM:SOUR INT")
+        self.inst.write(f":LFO:FREQ {rate_hz}")
+        self.inst.write(f":FM:DEV {deviation_hz}")
+        self.inst.write(":FM:STAT ON")
+        # FM is an option, and the deviation limit depends on the carrier, so
+        # read the settings back rather than assume they took.
+        for query, expected in (
+            (":LFO:FREQ?", rate_hz),
+            (":FM:DEV?", deviation_hz),
+            (":FM:STAT?", 1),
+        ):
+            actual = float(self.inst.query(query))
+            if not math.isclose(actual, expected, rel_tol=1e-6):
+                raise ValueError(f"{query} returned {actual}, expected {expected}.")
 
     def _check_power(self, power_dBm: float):
         if -145.0 <= power_dBm <= 14.0:

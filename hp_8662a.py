@@ -79,10 +79,43 @@ class HP8662A:
 
 
 class HP8663A(HP8662A):
+    # Status byte bit set when a program code is rejected (manual 08663-90069,
+    # "HP-IB Status Byte").
+    STB_ENTRY_ERROR = 0x02
+
     def _check_frequency(self, frequency_hz: float):
         if 100e3 <= frequency_hz <= 2560e6:
             return
         raise ValueError(f"Frequency {frequency_hz} Hz out of range.")
+
+    def status(self):
+        """Returns the STATUS key message, "SS,HHH,M" (program code MS)."""
+        assert self.inst
+        self._write_string("MS\n")
+        return self.inst.read().strip()
+
+    def set_fm(self, rate_hz: float, deviation_hz: float):
+        """
+        Frequency modulates from the internal modulation oscillator.
+
+        Written from the manual (08663-90069, "Modulation, Internal FM" and
+        "Modulation, External FM"); not yet tried on an instrument.
+        """
+        assert self.inst
+        # An entry error latches until both the status message and the status
+        # byte have been read, so clear any left from before.
+        self.status()
+        self.inst.read_stb()
+        # Deviation can only be entered in kHz.  MOD FREQ after FM selects the
+        # internal oscillator even if FM was last external.
+        self._write_string(f"FM{deviation_hz / 1e3:g}KZMF{rate_hz:g}HZ\n")
+        # MS is answered only once the codes before it are processed, so the
+        # status byte is current after it.
+        status = self.status()
+        if self.inst.read_stb() & self.STB_ENTRY_ERROR:
+            raise ValueError(
+                f"FM of {deviation_hz} Hz at {rate_hz} Hz rejected; status {status}."
+            )
 
 
 def main(argv):
