@@ -55,15 +55,37 @@ running eye test is turned off over SCPI. So:
    off on the front panel (Analyze > Features: Mask). Re-run the check after
    they say it is done.
 
-2. **Run the test.**
-   `uv run ./canfd_eye_test.py 1M 2M --sp-min 70 --sp-max 80 --dsp 75 -o <outdir> --scope RESOURCE --collect <seconds>`
+2. **Set the trigger from the bus, then check it.** The eye is only valid
+   if every capture starts on a BRS bit. The default window (825-925 ns at
+   -0.7 V) assumes ideal edges; on a real bus the slow dominant-to-recessive
+   edge shortens every recessive pulse, which can push BRS out of the window
+   and 1 us bits into it. Then the eye test overlays the wrong bits and
+   reports failures that aren't in the signal. With the mask test off:
+   - Measure: `uv run ./canfd_trigger_check.py segments 1M 2M --trigger sof --segments 500 --scope RESOURCE -o <outdir>`.
+     It prints each ID's BRS width; keep the `.npz` path.
+   - Choose: `uv run ./canfd_trigger_check.py suggest <npz> --level L` for
+     L = 0.7, 1.0, 1.2, 1.4 in turn; use the lowest level that gives a
+     window. Keep L well below the weakest dominant level on screen (a
+     threshold near the dominant level misses frames). If no level works,
+     stop: say so, with the BRS widths and the nearest other pulses.
+   - Check: `uv run ./canfd_trigger_check.py segments 1M 2M --trigger glitch --window LO-HI --level L --segments 500 --scope RESOURCE -o <outdir>`.
+     It must report 0 wrong. Ambiguous segments (frame start outside the
+     record) are allowed but go in the report. Any wrong trigger: stop and
+     report it; don't run the eye test.
+
+   Over USB these captures have not been tried yet; they avoid the commands
+   known to wedge the scope (see Scope safety), but stop at the first
+   timeout.
+
+3. **Run the test.**
+   `uv run ./canfd_eye_test.py 1M 2M --sp-min 70 --sp-max 80 --dsp 75 --window LO-HI --level L -o <outdir> --scope RESOURCE --collect <seconds>`
    Use a Bash timeout of the duration plus 120 s; for runs longer than about
    8 minutes run it in the background and wait for it. The tool prints the
    `.csv` and `.png` paths it saved; use those. If it reports "nothing
    tested", don't build a report: tell the user (likely no traffic, wrong
    polarity or rates) and stop.
 
-3. **Analyze.** Look at the PNG with the Read tool and work through the CSV.
+4. **Analyze.** Look at the PNG with the Read tool and work through the CSV.
    Cover, from what is actually visible and in the numbers:
    - the verdict: frames tested, failed, failure rate. Say what the rate
      means: the share of captured waveforms that touched a keep-out zone at
@@ -83,10 +105,11 @@ running eye test is turned off over SCPI. So:
      through it, and what that means (late or slow edges, low amplitude,
      noise). Don't generalize from one cluster;
    - ringing, overshoot, or reflections at the edges;
-   - alignment: the eye is only valid if every capture starts on the BRS bit.
-     Note the trigger window the run printed, which pulses it excludes, and
-     that the screen alone doesn't confirm alignment. A consistent early or
-     late edge pattern could also come from misaligned captures;
+   - alignment: give the trigger window and level, each ID's measured BRS
+     width, and the step-2 check (wrong and ambiguous counts out of N, and
+     the 95 % upper bound 3/N on wrong triggers). Fast, driven
+     (recessive-to-dominant) edges crossing mid-bit mean misaligned
+     captures, not a slow bus;
    - how many frames per second were tested versus the bus rate, if known.
    End with what to check next. Always consider: finding which node sends
    the failing frames (stop on mask failure, read the ID from the decoder
@@ -102,7 +125,7 @@ running eye test is turned off over SCPI. So:
    Write this as an HTML fragment (`<p>`, `<ul>`, `<h3>`; no `<style>`, no
    classes) to `<stem>-analysis.html`. Plain, direct sentences.
 
-4. **Build the page.**
+5. **Build the page.**
    ```sh
    uv run python .claude/skills/canfd-eye-report/build_report.py \
        --csv "<stem>.csv" --png "<stem>.png" --info <outdir>/scope-<HHMMSS>.json \
@@ -115,13 +138,15 @@ running eye test is turned off over SCPI. So:
        --param "Probe=N2792A differential, 10:1, high impedance at the bus" \
        --param "Scope input=50 Ω (terminates the probe output)" \
        --param "Mask=<the .msk file name>" --param "Duration=<seconds> s" \
+       --param "Trigger=<LO-HI> ns at <L> V, set from measured BRS widths" \
+       --param "Trigger check=<brs> of <N> on BRS, <wrong> wrong" \
        --out "<stem>.html"
    ```
    Set the `--param` values to what was actually run, and add one per bench
    measurement the user gave, e.g.
    `--param "Termination=60 Ω measured (CAN_H to CAN_L, bus off)"`.
 
-5. **Publish.** Call the Artifact tool with `action: "quickstart"` and
+6. **Publish.** Call the Artifact tool with `action: "quickstart"` and
    `intent: "other"` first, as its rules require for a new artifact. The
    report is a plain page (its design is fixed in `build_report.py` and
    `report.css`), not one of the listed types. Then publish `<stem>.html`
@@ -130,7 +155,7 @@ running eye test is turned off over SCPI. So:
    eye test of <DUT model> SN <serial>: 1.6 % mask failures."). Each run is
    its own artifact.
 
-6. **Report back** in a few lines: the verdict, the main finding, the
+7. **Report back** in a few lines: the verdict, the main finding, the
    artifact link. Remind the user that the eye test is still running on the
    scope and must be turned off on the front panel before the next run over
    USB.

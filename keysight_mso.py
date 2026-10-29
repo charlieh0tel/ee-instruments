@@ -288,6 +288,9 @@ class KeysightMSO:
         assert self.inst
         assert all(-1 <= v <= 1 for v in values)
         self.inst.write(":WGEN:FUNCtion ARBitrary")
+        # Ramp between points, not a staircase: a held step near a trigger
+        # threshold chatters.
+        self.inst.write(":WGEN:ARBitrary:INTerpolate ON")
         self.inst.write(":WGEN:ARBitrary:DATA " + ",".join(f"{v:g}" for v in values))
         self.inst.query("*OPC?")
         self.inst.write(f":WGEN:FREQuency {frequency:.6f}")
