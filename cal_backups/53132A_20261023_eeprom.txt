@@ -1,0 +1,17 @@
+HP 53132A EEPROM backup
+
+Instrument:   HEWLETT-PACKARD,53132A,0,4613  (*IDN?; firmware 4613; no serial number reported)
+Part:         U14, AT28C64B, 8 KiB, mapped at 0x400000-0x401fff
+Read:         2026-10-23, word by word with `@` through the counter's pForth console
+              (:DIAG:SYST:PSTartup 1 and a power cycle; console on the rear RS-232,
+              19200 8N1, null modem, via ser2net), 2048 reads of 4 bytes
+File:         53132A_20261023_eeprom.bin, the 8192 bytes in address order
+sha256:       4ac4852d9edab070ffcd95ae546e85117031754774c246667c94d5ded7e38a94
+
+Holds the calibration and settings records (slots at 0x400020 and
+0x400060, tag 0x5313).  The settings record carries the firmware tag
+3944, from before the unit was upgraded to 4613.  The ROM read the same
+way is byte for byte the published 4613 image.
+
+Restore only with care: writing the EEPROM back replaces the calibration
+and settings; see Jared Cabot's 531xxA Firmware Supplement.
