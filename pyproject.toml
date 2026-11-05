@@ -36,11 +36,12 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-# The tools are top-level modules, not a package.
-pythonpath = ["."]
+# The tools are top-level modules, not a package, and so are the plotting
+# scripts in rf_sensor_measurements.
+pythonpath = [".", "rf_sensor_measurements"]
 testpaths = ["tests"]
 
 [tool.mypy]
-files = ["*.py", "tools", "tests", ".claude/skills"]
+files = ["*.py", "tests", ".claude/skills"]
 # pyvisa-py, python-vxi11 and others ship no type hints.
 ignore_missing_imports = true
