@@ -28,4 +28,13 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["pre-commit", "ruff"]
+dev = [
+    "pre-commit",
+    "pytest>=9.2.0",
+    "ruff",
+]
+
+[tool.pytest.ini_options]
+# The tools are top-level modules, not a package.
+pythonpath = ["."]
+testpaths = ["tests"]
