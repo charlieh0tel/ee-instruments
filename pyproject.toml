@@ -41,6 +41,6 @@ pythonpath = ["."]
 testpaths = ["tests"]
 
 [tool.mypy]
-files = ["*.py", "tools", "tests"]
+files = ["*.py", "tools", "tests", ".claude/skills"]
 # pyvisa-py, python-vxi11 and others ship no type hints.
 ignore_missing_imports = true
