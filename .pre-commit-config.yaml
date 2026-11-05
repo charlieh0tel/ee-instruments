@@ -7,6 +7,11 @@
 # pre-commit stashes unstaged changes around hooks, so that shows up as
 # "Stashed changes conflicted with hook auto-fixes" or, worse, silently leaves
 # uv.lock dirty after the commit. --frozen makes the hooks read-only.
+
+# `pre-commit install` installs the commit-msg hook too; the ruff hooks run
+# only at commit time.
+default_install_hook_types: [pre-commit, commit-msg]
+default_stages: [pre-commit]
 repos:
   - repo: local
     hooks:
@@ -23,3 +28,9 @@ repos:
         language: system
         types_or: [python, pyi]
         require_serial: true
+
+      - id: commit-msg
+        name: no AI attribution (AGENTS.md)
+        entry: sh .githooks/commit-msg
+        language: system
+        stages: [commit-msg]

@@ -10,8 +10,9 @@ Dependencies are managed with [uv](https://docs.astral.sh/uv/):
 uv sync
 ```
 
-Install the pre-commit hook so `ruff check` and `ruff format --check` run on
-staged Python files (the same checks CI runs):
+Install the hooks so `ruff check` and `ruff format --check` run on staged
+Python files (the same checks CI runs), and `.githooks/commit-msg` refuses a
+message that credits an AI assistant (AGENTS.md):
 
 ```sh
 uv run pre-commit install
