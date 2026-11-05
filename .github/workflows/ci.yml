@@ -23,13 +23,10 @@ jobs:
     uses: charlieh0tel/deb-workflows/.github/workflows/python-ci.yml@v1
     with:
       python-version: ${{ matrix.python-version }}
-      # No unit tests -- the drivers need real instruments -- so the "test"
-      # slot runs the import smoke check instead. It must start with the tool
-      # name, so MPLBACKEND and sys.path are set inside the script.
-      test-command: "python tools/smoke_import.py"
     # Defaults cover the rest: the workflow detects uv from uv.lock, then
-    # lock-check=auto makes the sync `--locked`, and lint/format run ruff from
-    # the locked project environment (ruff.toml pins the rule set).
+    # lock-check=auto makes the sync `--locked`; the test slot runs pytest
+    # (tests/, configured in pyproject.toml); lint/format run ruff from the
+    # locked project environment (ruff.toml pins the rule set).
       # This is a uv project, so pip-audit runs against the locked project
       # environment and nothing else -- none of the runner image's own
       # packages, which is why the shared workflow leaves it off by default.
