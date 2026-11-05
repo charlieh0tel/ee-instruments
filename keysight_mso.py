@@ -320,8 +320,7 @@ class KeysightMSO:
     def measure_channel(self, channel, measure: Measurement, *options):
         assert self.inst
         assert 1 <= channel <= 4
-        options = list(options) + [f"CHAN{channel}"]
-        options_string = ",".join(options)
+        options_string = ",".join([*options, f"CHAN{channel}"])
         query = f":MEAS:{measure}? {options_string}"
         # print(query)
         v = float(self.inst.query(query))
