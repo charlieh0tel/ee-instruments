@@ -17,6 +17,12 @@ staged Python files (the same checks CI runs):
 uv run pre-commit install
 ```
 
+CI also type-checks with mypy (configured in `pyproject.toml`):
+
+```sh
+uv run mypy
+```
+
 Run any script through uv, which creates/updates `.venv` as needed:
 
 ```sh

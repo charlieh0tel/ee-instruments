@@ -155,7 +155,7 @@ class HP436A:
             assert b[13] == ord("\n")
             return (value, status, range_, mode, mantissa, exponent)
         except:
-            print(f"failed to parse {b}", file=sys.stderr)
+            print(f"failed to parse {b!r}", file=sys.stderr)
             raise
 
 

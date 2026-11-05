@@ -34,3 +34,18 @@ jobs:
       # environment and nothing else -- none of the runner image's own
       # packages, which is why the shared workflow leaves it off by default.
       audit-command: pip-audit
+
+  # The shared workflow has no type-check slot, so mypy runs here. One
+  # interpreter, the declared floor: mypy checks against the version it runs
+  # on, and [tool.mypy] in pyproject.toml sets what it checks.
+  mypy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.11"
+      - run: uv sync --locked
+      - run: uv run mypy
