@@ -320,7 +320,10 @@ def classify_glitch(ps, hdr, window, t_end):
     if trig is None or abs(trig[2]) > 100e-9:
         return "wrong", None, "no recessive pulse ending at the trigger"
     width = trig[2] - trig[1]
-    after = [p[2] - p[1] for p in ps if 0 <= p[1] < 5e-6 and p[2] < t_end]
+    # From -100 ns: the ESI bit starts where BRS ends, at the trigger, which
+    # can fall a few ns before t = 0; dropping it misses the one data-rate
+    # bit a frame whose payload opens with long runs is sure to have.
+    after = [p[2] - p[1] for p in ps if -100e-9 <= p[1] < 5e-6 and p[2] < t_end]
     data_bits = any(400e-9 < w < 600e-9 for w in after)
     why = f"width {width * 1e9:.0f} ns, data-rate bits {data_bits}"
     if not lo - 50e-9 < width < hi + 50e-9:
